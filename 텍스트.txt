@@ -1,0 +1,1827 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UniGym Pulse | 학교 헬스장 실시간 혼잡도 & 기구 사용 가이드</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- QRCode.js for Real URL QR Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Google Fonts: Pretendard -->
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard.css" />
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'Roboto', 'sans-serif'],
+                    },
+                    colors: {
+                        gym: {
+                            dark: '#0B0F19',
+                            card: '#151C2C',
+                            border: '#263147',
+                            neon: '#10B981',
+                            blue: '#3B82F6',
+                            warn: '#F59E0B',
+                            danger: '#EF4444'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0B0F19;
+            color: #F8FAFC;
+            overflow-x: hidden;
+            padding-bottom: 5rem;
+        }
+        @media (min-width: 768px) {
+            body {
+                padding-bottom: 0;
+            }
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0B0F19;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #263147;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3B82F6;
+        }
+        .glass-panel {
+            background: rgba(21, 28, 44, 0.9);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .gauge-transition {
+            transition: stroke-dashoffset 0.7s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.4s ease;
+        }
+        .bar-transition {
+            transition: height 0.45s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.8; }
+            100% { transform: scale(2); opacity: 0; }
+        }
+        .live-dot::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 9999px;
+            background-color: inherit;
+            animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+        #qrcode-canvas img, #qrcode-canvas canvas {
+            margin: 0 auto;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-emerald-500 selection:text-white">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-20 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+    <!-- Top Navigation Header -->
+    <header class="sticky top-0 z-40 glass-panel border-b border-gym-border">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <!-- Brand Logo -->
+            <div class="flex items-center gap-3 cursor-pointer" onclick="switchTab('dashboard')">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-blue-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                    <i class="fa-solid fa-dumbbell text-white text-lg"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-extrabold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-100 to-emerald-400">UniGym Pulse</span>
+                        <span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>LIVE
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-400 hidden sm:block">교내 피트니스 실시간 혼잡도 & 기구 사용 가이드</p>
+                </div>
+            </div>
+
+            <!-- Desktop Navigation Tabs (Clean 2-Tab Service Navigation) -->
+            <nav class="hidden md:flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
+                <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-btn px-4 py-2 rounded-lg text-sm font-bold transition-all bg-emerald-500 text-slate-950 shadow-md">
+                    <i class="fa-solid fa-bolt mr-1.5"></i>실시간 혼잡도 & 시간대 예측
+                </button>
+                <button onclick="switchTab('zones')" id="nav-zones" class="nav-btn px-4 py-2 rounded-lg text-sm font-semibold text-slate-300 hover:text-white transition-all">
+                    <i class="fa-solid fa-book-open mr-1.5"></i>기구 사용설명서 & 유튜브 루틴
+                </button>
+            </nav>
+
+            <!-- Quick QR & Check-in / Check-out Action -->
+            <div class="flex items-center gap-2">
+                <button onclick="toggleCheckIn()" id="header-checkin-btn" class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-1.5">
+                    <i class="fa-solid fa-right-to-bracket" id="header-checkin-icon"></i>
+                    <span id="header-checkin-text">입실 체크인</span>
+                </button>
+                <button onclick="openQrModal()" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all flex items-center gap-1.5" title="실제 접속 QR코드 보기">
+                    <i class="fa-solid fa-qrcode text-lg text-emerald-400"></i>
+                    <span class="hidden lg:inline text-xs font-bold">QR 코드</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile Top Sub-Navigation Bar -->
+        <div class="flex md:hidden border-t border-slate-800/80 bg-slate-900/95 px-2 py-1.5 justify-around gap-1.5">
+            <button onclick="switchTab('dashboard')" id="m-nav-dashboard" class="flex-1 py-1.5 rounded-lg text-xs font-bold text-center transition-all bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                <i class="fa-solid fa-bolt mr-1"></i>실시간 혼잡도
+            </button>
+            <button onclick="switchTab('zones')" id="m-nav-zones" class="flex-1 py-1.5 rounded-lg text-xs font-medium text-slate-400 text-center transition-all">
+                <i class="fa-solid fa-book-open mr-1"></i>기구 가이드 & 루틴
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- Operating Hours & Live Status Top Strip -->
+        <div class="glass-panel rounded-2xl p-4 sm:px-6 border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div class="flex items-center gap-3.5">
+                <div id="op-status-icon-box" class="w-11 h-11 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0 text-emerald-400">
+                    <i class="fa-solid fa-door-open text-lg"></i>
+                </div>
+                <div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span id="op-status-badge" class="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">현재 운영 중</span>
+                        <span id="real-clock-text" class="text-xs text-slate-300 font-semibold">실시간 기준 시각 불러오는 중...</span>
+                    </div>
+                    <p id="op-status-desc" class="text-xs sm:text-sm font-bold text-white mt-1">운영시간 확인 중...</p>
+                </div>
+            </div>
+
+            <!-- Weekly Operating Schedule Pills -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div class="px-3 py-2 rounded-xl bg-slate-900/90 border border-slate-800">
+                    <span class="text-slate-400 block text-[11px]">월 ~ 목요일</span>
+                    <span class="font-bold text-white">07:00 ~ 23:00</span>
+                </div>
+                <div class="px-3 py-2 rounded-xl bg-slate-900/90 border border-slate-800">
+                    <span class="text-slate-400 block text-[11px]">금요일 (단축)</span>
+                    <span class="font-bold text-amber-400">07:00 ~ 19:00</span>
+                </div>
+                <div class="px-3 py-2 rounded-xl bg-slate-900/90 border border-slate-800">
+                    <span class="text-slate-400 block text-[11px]">토요일</span>
+                    <span class="font-bold text-rose-400">정기 휴무</span>
+                </div>
+                <div class="px-3 py-2 rounded-xl bg-slate-900/90 border border-slate-800">
+                    <span class="text-slate-400 block text-[11px]">일요일</span>
+                    <span class="font-bold text-blue-400">14:00 ~ 22:00</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             TAB 1: REAL-TIME DASHBOARD (메인 대시보드)
+             ========================================== -->
+        <section id="tab-dashboard" class="space-y-6">
+            
+            <!-- Time & Day Simulator Controller Bar -->
+            <div class="glass-panel rounded-2xl p-4 sm:p-5 border border-slate-800">
+                <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                        <span class="relative flex h-3 w-3 shrink-0">
+                            <span class="live-dot relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                        </span>
+                        <div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <h3 class="text-sm font-bold text-white">운영시간 기반 요일·1시간 단위 혼잡도 시뮬레이터</h3>
+                                <span id="sync-mode-pill" class="text-[11px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">실시간 현재 시각 연동됨</span>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-0.5">요일별 운영시간(월~목 07-23시, 금 07-19시, 토 휴무, 일 14-22시)에 맞춰 1시간 단위 예상 혼잡도를 조회하세요.</p>
+                        </div>
+                    </div>
+
+                    <!-- Day Type Tabs, 1-Hour Slot Select & Live Sync Button -->
+                    <div class="flex flex-wrap items-center gap-2 sm:gap-2.5">
+                        <!-- 4 Day-Group Buttons -->
+                        <div class="bg-slate-900 p-1 rounded-xl border border-slate-800 flex flex-wrap gap-1">
+                            <button onclick="setDayGroup('mon_thu', false)" id="btn-mon_thu" class="day-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white transition-all">월~목 (07~23시)</button>
+                            <button onclick="setDayGroup('fri', false)" id="btn-fri" class="day-btn px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition-all">금 (07~19시)</button>
+                            <button onclick="setDayGroup('sat', false)" id="btn-sat" class="day-btn px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition-all">토 (휴무)</button>
+                            <button onclick="setDayGroup('sun', false)" id="btn-sun" class="day-btn px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition-all">일 (14~22시)</button>
+                        </div>
+
+                        <!-- 1-Hour Time Slot Select Dropdown -->
+                        <select id="time-slot-select" onchange="onTimeSlotChange(this.value, false)" class="bg-slate-900 text-white text-xs sm:text-sm font-semibold px-3.5 py-2 rounded-xl border border-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer">
+                            <!-- Populated dynamically by JS -->
+                        </select>
+
+                        <!-- Current Time Live Sync Button -->
+                        <button onclick="syncWithRealCurrentTime(true)" id="btn-sync-now" class="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-xs font-extrabold text-slate-950 shadow-md shadow-emerald-500/20 transition-all flex items-center gap-1.5" title="실제 현재 요일 및 시각으로 즉시 동기화">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <span>현재 시간 연동 (실시간)</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Closed / Out-of-Hours Notice Banner (Shown on Saturday or outside operating hours in Live mode) -->
+            <div id="closed-notice-banner" class="hidden rounded-3xl bg-gradient-to-r from-rose-950/90 via-slate-900 to-slate-900 border border-rose-500/40 p-6 sm:p-7">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
+                    <div class="space-y-2 max-w-2xl">
+                        <span id="closed-banner-badge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                            <i class="fa-solid fa-ban"></i> 운영 종료 / 정기 휴무 안내
+                        </span>
+                        <h2 id="closed-banner-title" class="text-xl sm:text-2xl font-black text-white">토요일은 헬스장 정기 휴무일입니다</h2>
+                        <p id="closed-banner-desc" class="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                            시설 점검 및 방역을 위해 토요일 전 시간대 헬스장을 운영하지 않습니다. 일요일 오픈 시간(14:00 ~ 22:00)을 이용하거나 기구 사용설명서 탭에서 맨몸 홈트레이닝 루틴을 확인해보세요!
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap sm:flex-col gap-2 shrink-0">
+                        <button onclick="setDayGroup('sun', false)" class="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition-all shadow-lg">
+                            일요일(14~22시) 혼잡도 보기 <i class="fa-solid fa-arrow-right ml-1"></i>
+                        </button>
+                        <button onclick="switchTab('zones')" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 font-bold text-xs transition-all">
+                            기구 사용법 & 대체 루틴
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Top Grid: Live Gauge Card + Smart Recommendation & Live Check-in / Voting -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Left 5 Cols: Real-time Congestion Gauge Card -->
+                <div class="lg:col-span-5 glass-panel rounded-3xl p-6 flex flex-col justify-between relative overflow-hidden border border-slate-800">
+                    <div id="status-glow" class="absolute -top-24 -right-24 w-56 h-56 bg-red-500/15 rounded-full blur-3xl pointer-events-none transition-all duration-700"></div>
+                    
+                    <div class="flex items-start justify-between gap-2">
+                        <div>
+                            <span id="display-time-label" class="text-xs font-bold tracking-wider text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">월~목 20:00 ~ 21:00 기준</span>
+                            <h2 class="text-xl font-extrabold text-white mt-2">실시간 헬스장 혼잡도</h2>
+                        </div>
+                        <div class="text-right shrink-0">
+                            <span class="text-[11px] text-slate-400 block">실측 평균 운동시간</span>
+                            <span id="live-avg-duration-badge" class="text-xs sm:text-sm font-bold text-emerald-400">
+                                <i class="fa-regular fa-hourglass-half mr-1"></i>75분
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Circular SVG Gauge -->
+                    <div class="my-6 flex flex-col items-center justify-center relative">
+                        <svg class="w-56 h-56 transform -rotate-90" viewBox="0 0 200 200">
+                            <circle cx="100" cy="100" r="82" stroke="#1E293B" stroke-width="18" fill="transparent" stroke-linecap="round" />
+                            <circle id="gauge-circle" cx="100" cy="100" r="82" stroke="#EF4444" stroke-width="18" fill="transparent" 
+                                stroke-dasharray="515.22" stroke-dashoffset="100" stroke-linecap="round" class="gauge-transition" />
+                        </svg>
+                        <!-- Center Text Inside Gauge -->
+                        <div class="absolute inset-0 flex flex-col items-center justify-center text-center">
+                            <span id="status-emoji" class="text-3xl mb-1">🔥</span>
+                            <span id="status-badge-text" class="text-2xl font-black tracking-tight text-red-400">매우 혼잡</span>
+                            <div class="mt-1 flex items-baseline gap-1">
+                                <span id="current-headcount" class="text-3xl font-extrabold text-white">41</span>
+                                <span class="text-sm text-slate-400 font-semibold">/ 45명 정원</span>
+                            </div>
+                            <span id="congestion-percent-text" class="text-xs font-bold text-slate-400 mt-0.5">혼잡도 91%</span>
+                        </div>
+                    </div>
+
+                    <!-- Footnote inside Gauge Card -->
+                    <div class="bg-slate-900/90 rounded-2xl p-4 border border-slate-800/80 space-y-2">
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-slate-400 font-medium"><i class="fa-solid fa-users-viewfinder mr-1.5 text-blue-400"></i>시간대별 이용 밀집도</span>
+                            <span id="time-density-label" class="font-bold text-white">높음 (예측 지수 88%)</span>
+                        </div>
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="text-slate-400 font-medium"><i class="fa-solid fa-user-check mr-1.5 text-emerald-400"></i>실시간 QR 체크인 반영</span>
+                            <span id="live-checkin-delta-label" class="font-bold text-emerald-400">현재 0명 입실 중</span>
+                        </div>
+                        <p id="status-advice-text" class="text-xs text-slate-300 pt-2 border-t border-slate-800 leading-relaxed">
+                            평일 저녁 피크 시간대입니다. 프리웨이트 대기 시간이 길어질 수 있으니 기구 사용설명서 탭의 대체 운동 루틴을 활용해보세요.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Right 7 Cols: Dynamic Best Time Recommendations + Live Check-in & Activity Feed -->
+                <div class="lg:col-span-7 flex flex-col justify-between gap-6">
+                    
+                    <!-- Card 1: Dynamic Best Time to Visit (Changes per selected Day Group!) -->
+                    <div class="glass-panel rounded-3xl p-6 border border-slate-800 space-y-5">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                                <span id="rec-day-subtitle" class="text-xs font-bold text-blue-400 uppercase tracking-wider">월~목요일 (07:00~23:00) 맞춤 추천</span>
+                                <h3 class="text-lg font-extrabold text-white mt-0.5">선택 요일 쾌적 방문 추천 시간대 TOP 3</h3>
+                            </div>
+                            <span class="text-xs text-slate-400 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800">
+                                <i class="fa-solid fa-wand-magic-sparkles text-emerald-400 mr-1"></i>시간대 클릭 시 즉시 조회
+                            </span>
+                        </div>
+
+                        <!-- 3 Dynamic Recommended Time Slots -->
+                        <div id="dynamic-recommendations-grid" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <!-- Populated dynamically via JS based on dayGroup -->
+                        </div>
+
+                        <!-- Quick Guide to Equipment Manual Tab -->
+                        <div class="rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-slate-800/90 p-4 border border-slate-700/70 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                            <div class="space-y-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-bold text-emerald-400"><i class="fa-solid fa-book-open mr-1"></i>기구 세팅법이 헷갈리거나 자리가 찼다면?</span>
+                                </div>
+                                <p class="text-xs text-slate-300 leading-relaxed">
+                                    주요 헬스 기구별 <strong>3단계 사용 설명서·추천 세트·유튜브 자세 영상</strong>과 혼잡 시 <strong>대체 운동 팁</strong>을 바로 확인하세요!
+                                </p>
+                            </div>
+                            <button onclick="switchTab('zones')" class="shrink-0 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-all shadow-md">
+                                기구 가이드 & 유튜브 <i class="fa-solid fa-arrow-right ml-1"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Card 2: Real-Time Check-In Status, Live Log & Crowd Voting -->
+                    <div class="glass-panel rounded-3xl p-6 border border-slate-800 flex flex-col justify-between gap-4">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div class="flex items-center gap-2.5">
+                                <div class="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                                    <i class="fa-solid fa-users"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-base font-extrabold text-white">실시간 QR 입·퇴실 연동 & 현장 체감 제보</h3>
+                                    <p class="text-xs text-slate-400">현재 실시간 체크인 인원: <strong id="live-active-users-count" class="text-emerald-400">0명</strong> · 오늘 누적 퇴실 기록 <strong id="live-total-sessions-count" class="text-blue-400">0건</strong></p>
+                                </div>
+                            </div>
+                            <span class="text-[11px] text-emerald-400 font-semibold self-start sm:self-center flex items-center gap-1">
+                                <i class="fa-solid fa-cloud-arrow-up"></i>실시간 DB 동기화
+                            </span>
+                        </div>
+
+                        <!-- User's Own Active Session Banner (Shown when checked in) -->
+                        <div id="my-session-banner" class="hidden rounded-2xl bg-emerald-950/50 border border-emerald-500/40 p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                            <div class="flex items-center gap-2.5">
+                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                                <div>
+                                    <p class="text-xs font-extrabold text-emerald-300">현재 헬스장 이용 중 (입실 체크인 완료)</p>
+                                    <p class="text-[11px] text-slate-300">입실 시각: <span id="my-checkin-time-display" class="font-bold text-white">-</span> · 경과 시간: <span id="my-elapsed-time-display" class="font-bold text-emerald-400 font-mono">00:00:00</span></p>
+                                </div>
+                            </div>
+                            <button onclick="toggleCheckIn()" class="px-3.5 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs transition-all shrink-0 shadow-md">
+                                <i class="fa-solid fa-right-from-bracket mr-1"></i>퇴실 체크아웃 (인원 차감)
+                            </button>
+                        </div>
+
+                        <!-- 4 Crowd Vote Buttons -->
+                        <div class="space-y-1.5">
+                            <span class="text-[11px] text-slate-400 font-semibold block">현장에 계신가요? 체감 혼잡도 버튼 클릭 시 실시간 게이지에 즉시 보정됩니다:</span>
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                                <button onclick="voteCongestion('relaxed')" class="py-2.5 px-3 rounded-2xl bg-slate-900 hover:bg-emerald-950/60 border border-slate-800 hover:border-emerald-500/50 transition-all flex flex-col items-center justify-center gap-1">
+                                    <span class="text-base">😊</span>
+                                    <span class="text-xs font-bold text-emerald-400">쾌적해요</span>
+                                    <span class="text-[10px] text-slate-400">혼잡도 하향 (-2명)</span>
+                                </button>
+                                <button onclick="voteCongestion('normal')" class="py-2.5 px-3 rounded-2xl bg-slate-900 hover:bg-blue-950/60 border border-slate-800 hover:border-blue-500/50 transition-all flex flex-col items-center justify-center gap-1">
+                                    <span class="text-base">🙂</span>
+                                    <span class="text-xs font-bold text-blue-400">보통이에요</span>
+                                    <span class="text-[10px] text-slate-400">현장 보정 (+1명)</span>
+                                </button>
+                                <button onclick="voteCongestion('crowded')" class="py-2.5 px-3 rounded-2xl bg-slate-900 hover:bg-amber-950/60 border border-slate-800 hover:border-amber-500/50 transition-all flex flex-col items-center justify-center gap-1">
+                                    <span class="text-base">😅</span>
+                                    <span class="text-xs font-bold text-amber-400">조금 붐벼요</span>
+                                    <span class="text-[10px] text-slate-400">혼잡도 상향 (+3명)</span>
+                                </button>
+                                <button onclick="voteCongestion('very_crowded')" class="py-2.5 px-3 rounded-2xl bg-slate-900 hover:bg-red-950/60 border border-slate-800 hover:border-red-500/50 transition-all flex flex-col items-center justify-center gap-1">
+                                    <span class="text-base">🔥</span>
+                                    <span class="text-xs font-bold text-red-400">매우 혼잡</span>
+                                    <span class="text-[10px] text-slate-400">혼잡도 상향 (+5명)</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Live Activity Ticker -->
+                        <div class="bg-slate-950/80 rounded-xl p-2.5 border border-slate-800/80 flex items-center gap-2 text-xs overflow-hidden">
+                            <span class="px-2 py-0.5 rounded bg-slate-800 text-emerald-400 font-bold text-[10px] shrink-0">실시간 로그</span>
+                            <div id="live-activity-ticker" class="text-slate-300 truncate">
+                                시스템 준비 완료 · QR 입실/퇴실 체크인 및 혼잡도 제보가 실시간으로 반영됩니다.
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- 1-Hour Unit Time-of-Day Congestion Bar Chart -->
+            <div class="glass-panel rounded-3xl p-6 border border-slate-800 space-y-5">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <span class="text-xs font-bold text-emerald-400 uppercase tracking-wider">Hourly Congestion Forecast</span>
+                        <h3 id="chart-section-title" class="text-lg font-extrabold text-white mt-0.5">월~목요일 운영시간(07:00~23:00) 1시간 단위 혼잡도 추이</h3>
+                        <p class="text-xs text-slate-400 mt-0.5">막대를 클릭하면 해당 시간대의 예상 인원, 혼잡도(%) 및 이용 팁을 즉시 확인할 수 있습니다.</p>
+                    </div>
+                    <!-- Legend -->
+                    <div class="flex flex-wrap items-center gap-3 text-xs">
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-3 h-3 rounded-sm bg-emerald-500 inline-block"></span>
+                            <span class="text-slate-300 font-medium">쾌적 (~34%)</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-3 h-3 rounded-sm bg-blue-500 inline-block"></span>
+                            <span class="text-slate-300 font-medium">보통 (35~64%)</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-3 h-3 rounded-sm bg-amber-500 inline-block"></span>
+                            <span class="text-slate-300 font-medium">혼잡 (65~84%)</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-3 h-3 rounded-sm bg-rose-500 inline-block"></span>
+                            <span class="text-slate-300 font-medium">매우 혼잡 (85%+)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interactive 1-Hour Bar Chart Container -->
+                <div id="hourly-chart-container" class="pt-4 pb-2 overflow-x-auto">
+                    <div id="hourly-bars-grid" class="min-w-[680px] grid gap-1.5 items-end h-56 pt-8 px-2 border-b border-slate-800">
+                        <!-- Rendered via JS -->
+                    </div>
+                    <div id="hourly-labels-grid" class="min-w-[680px] grid gap-1.5 pt-2 px-2 text-center">
+                        <!-- Rendered via JS -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==========================================================
+             TAB 2: EQUIPMENT MANUALS, YOUTUBE & ROUTINES (기구 사용설명서 & 루틴)
+             ========================================================== -->
+        <section id="tab-zones" class="hidden space-y-6">
+            
+            <!-- Header Banner for Tab 2 -->
+            <div class="glass-panel rounded-3xl p-6 border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">구역별 기구 사용설명서 & 유튜브 영상 가이드</span>
+                        <span class="text-xs text-slate-400">초보자 맞춤 세팅법 · 추천 루틴 & 대체 운동</span>
+                    </div>
+                    <h2 class="text-xl font-extrabold text-white mt-2">헬스장 대표 기구 3단계 사용법 & 유튜브 자세 가이드</h2>
+                    <p class="text-xs sm:text-sm text-slate-400 mt-1">기구별 올바른 세팅법, 호흡 및 주의사항을 단계별로 확인하고, 유튜브 영상 버튼으로 정확한 운동 동작을 바로 시청하세요.</p>
+                </div>
+
+                <!-- Zone Filter Pills (4 Zones + All) -->
+                <div class="flex flex-wrap gap-1.5 bg-slate-900 p-1.5 rounded-2xl border border-slate-800 shrink-0">
+                    <button onclick="filterEquipmentZone('all')" id="zfilter-all" class="zfilter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500 text-slate-950 transition-all">전체 구역 (8)</button>
+                    <button onclick="filterEquipmentZone('freeweight')" id="zfilter-freeweight" class="zfilter-btn px-3 py-1.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white transition-all">프리웨이트 존</button>
+                    <button onclick="filterEquipmentZone('machine')" id="zfilter-machine" class="zfilter-btn px-3 py-1.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white transition-all">머신 존</button>
+                    <button onclick="filterEquipmentZone('cable_smith')" id="zfilter-cable_smith" class="zfilter-btn px-3 py-1.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white transition-all">케이블/스미스 존</button>
+                    <button onclick="filterEquipmentZone('cardio')" id="zfilter-cardio" class="zfilter-btn px-3 py-1.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white transition-all">유산소 존</button>
+                </div>
+            </div>
+
+            <!-- Equipment Manuals Grid (Accordion details + YouTube Links) -->
+            <div id="equipment-manuals-grid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Populated dynamically by JS -->
+            </div>
+
+            <!-- Interactive Workout Order Optimizer Card -->
+            <div class="glass-panel rounded-3xl p-6 border border-slate-800 space-y-5">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                        <span class="text-xs font-bold text-blue-400 uppercase tracking-wider">Smart Routine Sequence Guide</span>
+                        <h3 class="text-lg font-extrabold text-white mt-0.5">피크타임 대기 시간 0분! 분할별 운동 순서 변경 & 추천 루틴</h3>
+                        <p class="text-xs text-slate-400">인기 기구에 줄이 길 때 오늘 운동 부위에 맞게 대체 기구와 최적의 순서를 선택해보세요.</p>
+                    </div>
+                    <div class="flex flex-wrap gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800 self-start">
+                        <button onclick="selectRoutineSplit('beginner')" id="split-beginner" class="split-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500 text-slate-950">초보자 전신 루틴</button>
+                        <button onclick="selectRoutineSplit('push')" id="split-push" class="split-btn px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white">가슴·어깨·삼두</button>
+                        <button onclick="selectRoutineSplit('pull')" id="split-pull" class="split-btn px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white">등·이두·후면</button>
+                        <button onclick="selectRoutineSplit('legs')" id="split-legs" class="split-btn px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white">하체·코어</button>
+                    </div>
+                </div>
+
+                <div id="routine-sequence-content" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Mobile Bottom Floating Quick Check-in Bar -->
+    <div class="md:hidden fixed bottom-0 inset-x-0 z-40 glass-panel border-t border-slate-800 px-4 py-2.5 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <div class="text-xs">
+                <span class="text-slate-400 block text-[10px]">실시간 혼잡도</span>
+                <span id="mobile-bar-status" class="font-extrabold text-white">매우 혼잡 (41/45명)</span>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="openQrModal()" class="p-2.5 rounded-xl bg-slate-800 text-emerald-400 border border-slate-700" title="QR 코드">
+                <i class="fa-solid fa-qrcode"></i>
+            </button>
+            <button onclick="toggleCheckIn()" id="mobile-floating-checkin-btn" class="px-4 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-extrabold text-xs shadow-lg">
+                입실 체크인
+            </button>
+        </div>
+    </div>
+
+    <!-- Real QR Code Modal (Generates actual scannable QR for window.location.href) -->
+    <div id="qr-modal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-panel max-w-md w-full rounded-3xl p-6 border border-slate-700 shadow-2xl space-y-5 relative">
+            <button onclick="closeQrModal()" class="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+
+            <div class="text-center space-y-1">
+                <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">실제 웹사이트 연결 QR코드</span>
+                <h3 class="text-xl font-extrabold text-white pt-1">헬스장 출입구 QR 스캔 & 체크인</h3>
+                <p class="text-xs text-slate-400">스마트폰 카메라로 아래 QR코드를 스캔하면 현재 웹페이지로 즉시 접속되며 자동 입실 체크인이 진행됩니다.</p>
+            </div>
+
+            <!-- QR Mode Toggle (Auto Check-in URL vs Direct View URL) -->
+            <div class="flex bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
+                <button onclick="generateRealQrCode('checkin')" id="qr-mode-checkin" class="flex-1 py-1.5 rounded-lg font-bold bg-emerald-500 text-slate-950 transition-all">
+                    출입구 자동 체크인 QR
+                </button>
+                <button onclick="generateRealQrCode('view')" id="qr-mode-view" class="flex-1 py-1.5 rounded-lg font-bold text-slate-400 hover:text-white transition-all">
+                    일반 혼잡도 조회 QR
+                </button>
+            </div>
+
+            <!-- Real Dynamic QR Code Container -->
+            <div class="bg-white p-4 rounded-2xl w-52 h-52 mx-auto flex items-center justify-center shadow-inner">
+                <div id="qrcode-canvas"></div>
+            </div>
+
+            <!-- Actual Shareable URL Box + Copy Button -->
+            <div class="space-y-1.5">
+                <label class="text-[11px] font-semibold text-slate-400 block">QR에 연결된 실제 사이트 주소 (URL)</label>
+                <div class="flex items-center gap-2">
+                    <input type="text" id="qr-target-url-input" readonly class="w-full bg-slate-950 text-slate-300 text-xs px-3 py-2.5 rounded-xl border border-slate-800 focus:outline-none select-all" value="">
+                    <button onclick="copyShareUrl()" class="shrink-0 px-3.5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs transition-all flex items-center gap-1">
+                        <i class="fa-regular fa-copy"></i>복사
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/90 p-3.5 rounded-2xl border border-slate-800 text-xs text-slate-300 space-y-1.5">
+                <div class="flex justify-between">
+                    <span class="text-slate-400">내 현재 체크인 상태:</span>
+                    <span id="modal-checkin-status" class="font-bold text-slate-200">미입실 (체크인 전)</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">운영시간 안내:</span>
+                    <span class="font-semibold text-emerald-400">월-목 07~23 | 금 07~19 | 일 14~22</span>
+                </div>
+            </div>
+
+            <div class="flex gap-2">
+                <button onclick="toggleCheckIn(); closeQrModal();" id="modal-checkin-action-btn" class="flex-1 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-all">
+                    <i class="fa-solid fa-check mr-1.5"></i>지금 바로 입실 체크인
+                </button>
+                <button onclick="closeQrModal()" class="px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-sm">
+                    닫기
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800/80 bg-slate-950/60 py-6 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-dumbbell text-emerald-500"></i>
+                <span class="font-bold text-slate-400">UniGym Pulse</span>
+                <span>| 학교 헬스장 운영시간 연동 실시간 혼잡도 & 기구 가이드</span>
+            </div>
+            <div>
+                <span>월~목 07-23시 · 금 07-19시 · 토 휴무 · 일 14-22시</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Firebase SDK & Main Application Script -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, increment } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // =========================================================================
+        // 1. OPERATING HOURS & 1-HOUR UNIT PREDICTION DATA MODEL
+        //    월~목: 07:00~23:00 (16개 시간대)
+        //    금요일: 07:00~19:00 (12개 시간대)
+        //    토요일: 휴무 (Closed)
+        //    일요일: 14:00~22:00 (8개 시간대)
+        // =========================================================================
+        const MAX_CAPACITY = 45;
+
+        const operatingSchedule = {
+            mon_thu: {
+                groupName: '월~목요일 (07:00 ~ 23:00)',
+                shortTitle: '월~목요일 운영시간(07:00~23:00)',
+                isClosed: false,
+                recommendations: [
+                    { tag: '가장 쾌적 · 1순위', badgeClass: 'bg-emerald-500/20 text-emerald-400', hoverClass: 'hover:border-emerald-500/40', slotId: 'mt-09', title: '평일 오전 09:00~10:00', desc: '혼잡도 11% · 프리웨이트 대기 0분 골든타임' },
+                    { tag: '오후 공강 · 2순위', badgeClass: 'bg-blue-500/20 text-blue-400', hoverClass: 'hover:border-blue-500/40', slotId: 'mt-13', title: '평일 오후 13:00~14:00', desc: '혼잡도 29% · 수업 사이 공강 시간 쾌적 운동' },
+                    { tag: '심야 여유 · 3순위', badgeClass: 'bg-indigo-500/20 text-indigo-400', hoverClass: 'hover:border-indigo-500/40', slotId: 'mt-22', title: '평일 심야 22:00~23:00', desc: '피크 인원 퇴실 후 마감 전 여유로운 마무리' }
+                ],
+                slots: [
+                    { id: 'mt-07', hour: 7, label: '월~목 07:00 ~ 08:00 (오픈)', shortLabel: '07시', baseHeadcount: 8, advice: '07:00 오픈 직후 시간대로 매우 쾌적합니다. 3대 운동 렉을 대기 없이 이용하세요.' },
+                    { id: 'mt-08', hour: 8, label: '월~목 08:00 ~ 09:00', shortLabel: '08시', baseHeadcount: 7, advice: '1교시 수업 전 아침 운동 시간대로 한산하고 쾌적합니다.' },
+                    { id: 'mt-09', hour: 9, label: '월~목 09:00 ~ 10:00', shortLabel: '09시', baseHeadcount: 5, advice: '하루 중 이용자가 가장 적은 골든타임입니다! 원하는 기구를 대기 없이 이용하세요.' },
+                    { id: 'mt-10', hour: 10, label: '월~목 10:00 ~ 11:00', shortLabel: '10시', baseHeadcount: 6, advice: '오전 수업 시간대로 헬스장 전체 구역이 매우 여유롭습니다.' },
+                    { id: 'mt-11', hour: 11, label: '월~목 11:00 ~ 12:00', shortLabel: '11시', baseHeadcount: 10, advice: '점심시간 직전 공강 이용자가 조금 있으나 여전히 쾌적한 상태입니다.' },
+                    { id: 'mt-12', hour: 12, label: '월~목 12:00 ~ 13:00', shortLabel: '12시', baseHeadcount: 13, advice: '점심시간을 활용해 가볍게 운동하는 학우들이 소폭 유입되나 원활합니다.' },
+                    { id: 'mt-13', hour: 13, label: '월~목 13:00 ~ 14:00', shortLabel: '13시', baseHeadcount: 13, advice: '오후 수업 사이 공강 시간대로 기구 대기 없이 운동하기 좋습니다.' },
+                    { id: 'mt-14', hour: 14, label: '월~목 14:00 ~ 15:00', shortLabel: '14시', baseHeadcount: 15, advice: '쾌적~보통 수준의 안정적인 이용 흐름을 보이는 오후 시간대입니다.' },
+                    { id: 'mt-15', hour: 15, label: '월~목 15:00 ~ 16:00', shortLabel: '15시', baseHeadcount: 19, advice: '오후 수업이 끝난 학우들이 조금씩 모이기 시작하는 보통 수준입니다.' },
+                    { id: 'mt-16', hour: 16, label: '월~목 16:00 ~ 17:00', shortLabel: '16시', baseHeadcount: 25, advice: '저녁 피크타임 전 단계입니다. 17시 이전에 주요 프리웨이트 운동을 시작하면 좋습니다.' },
+                    { id: 'mt-17', hour: 17, label: '월~목 17:00 ~ 18:00', shortLabel: '17시', baseHeadcount: 31, advice: '저녁 피크타임 진입 구간입니다. 인기 기구는 1~2팀 대기가 발생할 수 있습니다.' },
+                    { id: 'mt-18', hour: 18, label: '월~목 18:00 ~ 19:00', shortLabel: '18시', baseHeadcount: 36, advice: '방과 후 이용객이 급증하는 혼잡 구간입니다. 대체 운동 루틴을 함께 참고하세요.' },
+                    { id: 'mt-19', hour: 19, label: '월~목 19:00 ~ 20:00', shortLabel: '19시', baseHeadcount: 40, advice: '매우 혼잡한 저녁 피크 시간대입니다! 기구 사용설명서 탭의 순서 변경 전략을 추천합니다.' },
+                    { id: 'mt-20', hour: 20, label: '월~목 20:00 ~ 21:00', shortLabel: '20시', baseHeadcount: 42, advice: '하루 중 가장 혼잡한 최대 피크 시간대입니다. 21시 30분 이후 방문 또는 대체 루틴을 권장합니다.' },
+                    { id: 'mt-21', hour: 21, label: '월~목 21:00 ~ 22:00', shortLabel: '21시', baseHeadcount: 34, advice: '21시 전반까지는 혼잡하나 21시 30분 이후부터 퇴실 인원이 늘어나며 점차 여유로워집니다.' },
+                    { id: 'mt-22', hour: 22, label: '월~목 22:00 ~ 23:00 (23시 마감)', shortLabel: '22시', baseHeadcount: 18, advice: '23:00 마감 전 마지막 1시간으로, 피크 인원이 빠져나가 쾌적하게 마무리 운동이 가능합니다.' }
+                ]
+            },
+            fri: {
+                groupName: '금요일 (07:00 ~ 19:00 단축운영)',
+                shortTitle: '금요일 운영시간(07:00~19:00 · 19시 조기마감)',
+                isClosed: false,
+                recommendations: [
+                    { tag: '금요일 추천 1순위', badgeClass: 'bg-emerald-500/20 text-emerald-400', hoverClass: 'hover:border-emerald-500/40', slotId: 'fri-09', title: '금요일 오전 09:00~10:00', desc: '주말 전 가장 한산한 시간대 · 전 구역 대기 제로' },
+                    { tag: '금요일 추천 2순위', badgeClass: 'bg-blue-500/20 text-blue-400', hoverClass: 'hover:border-blue-500/40', slotId: 'fri-13', title: '금요일 낮 13:00~14:00', desc: '19시 조기 마감 전 여유롭게 1.5시간 운동 가능' },
+                    { tag: '주의 · 조기마감', badgeClass: 'bg-amber-500/20 text-amber-400', hoverClass: 'hover:border-amber-500/40', slotId: 'fri-17', title: '17:30 이전 입실 권장', desc: '금요일은 19:00 정각 마감으로 저녁 운동 불가' }
+                ],
+                slots: [
+                    { id: 'fri-07', hour: 7, label: '금요일 07:00 ~ 08:00 (오픈)', shortLabel: '07시', baseHeadcount: 8, advice: '금요일 아침 오픈 시간대로 매우 쾌적합니다. 금요일은 19시 조기 마감이므로 오전 운동을 추천합니다.' },
+                    { id: 'fri-08', hour: 8, label: '금요일 08:00 ~ 09:00', shortLabel: '08시', baseHeadcount: 7, advice: '쾌적한 아침 시간대입니다. 여유롭게 프리웨이트 루틴을 진행할 수 있습니다.' },
+                    { id: 'fri-09', hour: 9, label: '금요일 09:00 ~ 10:00', shortLabel: '09시', baseHeadcount: 5, advice: '금요일 중 가장 한적한 시간대입니다. 기구 대기 없이 바로 사용 가능합니다.' },
+                    { id: 'fri-10', hour: 10, label: '금요일 10:00 ~ 11:00', shortLabel: '10시', baseHeadcount: 6, advice: '오전 수업 시간대로 매우 여유로운 상태를 유지합니다.' },
+                    { id: 'fri-11', hour: 11, label: '금요일 11:00 ~ 12:00', shortLabel: '11시', baseHeadcount: 10, advice: '쾌적한 수준으로 초보자도 눈치 보지 않고 기구 세팅법을 익히기 좋습니다.' },
+                    { id: 'fri-12', hour: 12, label: '금요일 12:00 ~ 13:00', shortLabel: '12시', baseHeadcount: 13, advice: '점심시간 공강 이용자가 소폭 있으나 대기 없이 이용 가능합니다.' },
+                    { id: 'fri-13', hour: 13, label: '금요일 13:00 ~ 14:00', shortLabel: '13시', baseHeadcount: 14, advice: '금요일 오후 황금 시간대입니다. 17시 이후 마감 전 인원이 몰리기 전에 운동을 시작하세요.' },
+                    { id: 'fri-14', hour: 14, label: '금요일 14:00 ~ 15:00', shortLabel: '14시', baseHeadcount: 17, advice: '보통 수준의 이용률로 원활한 운동이 가능합니다.' },
+                    { id: 'fri-15', hour: 15, label: '금요일 15:00 ~ 16:00', shortLabel: '15시', baseHeadcount: 23, advice: '19시 조기 마감을 앞두고 수업이 끝난 학우들이 점차 유입됩니다.' },
+                    { id: 'fri-16', hour: 16, label: '금요일 16:00 ~ 17:00', shortLabel: '16시', baseHeadcount: 30, advice: '마감 3시간 전으로 이용 인원이 빠르게 늘어나는 혼잡 구간입니다.' },
+                    { id: 'fri-17', hour: 17, label: '금요일 17:00 ~ 18:00', shortLabel: '17시', baseHeadcount: 37, advice: '⚠️ 금요일은 19:00에 마감합니다! 퇴근/하교 인원이 집중되어 혼잡하므로 서둘러 입실하세요.' },
+                    { id: 'fri-18', hour: 18, label: '금요일 18:00 ~ 19:00 (19시 마감)', shortLabel: '18시(마감)', baseHeadcount: 32, advice: '⚠️ 19:00 정각에 운영이 종료됩니다! 마무리 세트 및 정리 시간을 고려해 운동하세요.' }
+                ]
+            },
+            sat: {
+                groupName: '토요일 (정기 휴무 · 운영 안 함)',
+                shortTitle: '토요일 정기 휴무 (운영 시간 없음)',
+                isClosed: true,
+                recommendations: [
+                    { tag: '토요일 휴무 안내', badgeClass: 'bg-rose-500/20 text-rose-400', hoverClass: 'hover:border-rose-500/40', slotId: 'sat-closed', title: '토요일 전 시간 미운영', desc: '시설 점검 및 방역으로 인해 토요일은 휴무입니다' },
+                    { tag: '대체 방문 추천', badgeClass: 'bg-blue-500/20 text-blue-400', hoverClass: 'hover:border-blue-500/40', slotId: 'sun-open', title: '일요일 14:00 오픈 이용', desc: '일요일 오후 2시부터 22시까지 정상 운영합니다' },
+                    { tag: '홈트 대체 루틴', badgeClass: 'bg-emerald-500/20 text-emerald-400', hoverClass: 'hover:border-emerald-500/40', slotId: 'home-guide', title: '맨몸 코어·푸쉬업 루틴', desc: '기구 사용설명서 탭에서 대체 루틴을 확인하세요' }
+                ],
+                slots: [
+                    { id: 'sat-closed', hour: -1, label: '토요일 전일 정기 휴무 (운영 안 함)', shortLabel: '토요일 휴무', baseHeadcount: 0, advice: '토요일은 학교 헬스장 정기 휴무일입니다. 일요일 14:00 오픈 이후에 방문해 주세요.' }
+                ]
+            },
+            sun: {
+                groupName: '일요일 (14:00 ~ 22:00 운영)',
+                shortTitle: '일요일 운영시간(14:00~22:00)',
+                isClosed: false,
+                recommendations: [
+                    { tag: '일요일 추천 1순위', badgeClass: 'bg-emerald-500/20 text-emerald-400', hoverClass: 'hover:border-emerald-500/40', slotId: 'sun-14', title: '일요일 오픈 14:00~15:00', desc: '혼잡도 24% · 평일 저녁 대비 매우 한산한 오픈 타임' },
+                    { tag: '일요일 추천 2순위', badgeClass: 'bg-blue-500/20 text-blue-400', hoverClass: 'hover:border-blue-500/40', slotId: 'sun-16', title: '일요일 오후 16:00~17:00', desc: '혼잡도 31% · 1.5시간 이상 고강도 분할 운동 최적' },
+                    { tag: '일요일 추천 3순위', badgeClass: 'bg-indigo-500/20 text-indigo-400', hoverClass: 'hover:border-indigo-500/40', slotId: 'sun-20', title: '일요일 밤 20:00~21:00', desc: '월요일 수업 준비 전 가벼운 유산소·컨디셔닝 추천' }
+                ],
+                slots: [
+                    { id: 'sun-14', hour: 14, label: '일요일 14:00 ~ 15:00 (14시 오픈)', shortLabel: '14시', baseHeadcount: 11, advice: '일요일 오후 14:00 오픈 직후 시간대로 매우 쾌적하게 주말 운동을 시작할 수 있습니다.' },
+                    { id: 'sun-15', hour: 15, label: '일요일 15:00 ~ 16:00', shortLabel: '15시', baseHeadcount: 13, advice: '토요일 휴무 다음 날이지만 오후 시간대는 여유롭고 기구 대기가 거의 없습니다.' },
+                    { id: 'sun-16', hour: 16, label: '일요일 16:00 ~ 17:00', shortLabel: '16시', baseHeadcount: 14, advice: '쾌적한 주말 오후 시간대로 원하는 분할 루틴을 온전히 소화하기 좋습니다.' },
+                    { id: 'sun-17', hour: 17, label: '일요일 17:00 ~ 18:00', shortLabel: '17시', baseHeadcount: 16, advice: '보통 수준의 안정적인 이용 흐름을 보입니다.' },
+                    { id: 'sun-18', hour: 18, label: '일요일 18:00 ~ 19:00', shortLabel: '18시', baseHeadcount: 19, advice: '기숙사 복귀 학우들이 저녁 시간대에 방문하나 평일 저녁 피크(90%+)에 비하면 훨씬 한산합니다.' },
+                    { id: 'sun-19', hour: 19, label: '일요일 19:00 ~ 20:00', shortLabel: '19시', baseHeadcount: 20, advice: '보통 수준의 이용률로 프리웨이트와 머신 모두 원활히 이용 가능합니다.' },
+                    { id: 'sun-20', hour: 20, label: '일요일 20:00 ~ 21:00', shortLabel: '20시', baseHeadcount: 15, advice: '한 주를 마무리하는 컨디셔닝 및 유산소 운동에 적합한 쾌적한 시간대입니다.' },
+                    { id: 'sun-21', hour: 21, label: '일요일 21:00 ~ 22:00 (22시 마감)', shortLabel: '21시(마감)', baseHeadcount: 11, advice: '일요일은 22:00에 마감합니다. 마감 전 여유롭게 마무리 스트레칭까지 진행하세요.' }
+                ]
+            }
+        };
+
+        // =========================================================================
+        // 2. EQUIPMENT MANUALS & YOUTUBE GUIDE DATA (가짜 점유율 제거, 상세 사용법 제공)
+        // =========================================================================
+        const equipmentManuals = [
+            {
+                id: 'powerrack',
+                zone: 'freeweight',
+                zoneLabel: '프리웨이트 존',
+                name: '파워랙 / 스쿼트랙 (Power Rack)',
+                target: '하체 전체 · 둔근 · 코어 (3대 운동)',
+                difficulty: '중급 · 안전바 세팅 필수',
+                icon: 'fa-dumbbell',
+                steps: [
+                    '1. 세팅: 바벨 거치대(J-후크)를 쇄골 높이에 맞추고, 안전바(Safety Bar)를 스쿼트 최저점 바로 아래 높이에 반드시 고정합니다.',
+                    '2. 동작: 승모근 상부에 바벨을 얹고 발을 어깨너비로 벌린 뒤, 복압을 채우고 고관절과 무릎을 동시에 접어 허벅지가 바닥과 평행할 때까지 앉았다 일어납니다.',
+                    '3. 주의·호흡: 내려갈 때 숨을 깊이 들이마셔 복압을 유지하고, 올라오며 내쉽니다. 무릎이 안쪽으로 모이지 않게 주의하세요.'
+                ],
+                routine: '4세트 × 8~10회 (세트 간 휴식 90~120초)',
+                alternative: '파워랙 만석 시 → 덤벨 고블릿 스쿼트 또는 레그프레스 머신으로 순서 변경 추천',
+                youtubeQuery: '파워랙 바벨 스쿼트 올바른 세팅법 자세'
+            },
+            {
+                id: 'benchpress',
+                zone: 'freeweight',
+                zoneLabel: '프리웨이트 존',
+                name: '플랫 벤치프레스 & 덤벨 존 (Bench Press)',
+                target: '대흉근(가슴) · 전면삼각근 · 삼두근',
+                difficulty: '초중급 · 손목 중립 유지',
+                icon: 'fa-dumbbell',
+                steps: [
+                    '1. 세팅: 벤치에 누웠을 때 바벨이 눈 위치 바로 위에 오도록 눕고, 양발바닥을 바닥에 단단히 고정합니다.',
+                    '2. 동작: 어깨너비보다 1.5배 넓게 바벨을 잡고 가슴 중앙(유두선 부근)으로 천천히 내린 뒤, 가슴 근육으로 밀어 올립니다.',
+                    '3. 주의·호흡: 팔꿈치가 과도하게 벌어져 어깨가 들리지 않도록 견갑골(날개뼈)을 벤치에 고정하고, 밀어 올릴 때 호흡을 내쉽니다.'
+                ],
+                routine: '4세트 × 8~12회 (세트 간 휴식 90초)',
+                alternative: '벤치 대기 발생 시 → 인클라인 덤벨 프레스 또는 시티드 체스트 프레스 머신 활용',
+                youtubeQuery: '벤치프레스 초보자 세팅법 가슴운동 정석 자세'
+            },
+            {
+                id: 'latpulldown',
+                zone: 'machine',
+                zoneLabel: '머신 존',
+                name: '랫풀다운 & 시티드 로우 머신 (Lat Pulldown)',
+                target: '광배근(등 넓이) · 승모근 중하부 · 이두근',
+                difficulty: '초급 · 입문자 추천 1순위',
+                icon: 'fa-gears',
+                steps: [
+                    '1. 세팅: 무릎 패드를 허벅지가 뜨지 않게 단단히 고정하고, 바(Bar)를 어깨너비 1.5배 넓이로 잡습니다.',
+                    '2. 동작: 가슴을 위쪽으로 살짝 열어준 상태에서 팔꿈치를 아래로 수직으로 내린다는 느낌으로 바를 쇄골 앞쪽까지 당깁니다.',
+                    '3. 주의·호흡: 상체를 과도하게 뒤로 젖히지 말고, 당길 때 내쉬고 천천히 무게를 버티며 올릴 때 들이마십니다.'
+                ],
+                routine: '4세트 × 10~15회 (세트 간 휴식 60~90초)',
+                alternative: '랫풀다운 사용 중일 때 → 어시스트 풀업 머신 또는 원암 덤벨 로우로 등 루틴 선행',
+                youtubeQuery: '랫풀다운 머신 사용법 등운동 초보자 자세'
+            },
+            {
+                id: 'chestpress',
+                zone: 'machine',
+                zoneLabel: '머신 존',
+                name: '시티드 체스트 프레스 & 펙덱 플라이 (Chest Machine)',
+                target: '대흉근 중앙 및 안쪽 · 전면삼각근',
+                difficulty: '초급 · 궤적 고정으로 안전함',
+                icon: 'fa-gears',
+                steps: [
+                    '1. 세팅: 의자 높이를 조절하여 손잡이(그립)가 본인의 가슴 중앙 높이와 일직선이 되도록 맞춥니다.',
+                    '2. 동작: 등과 뒤통수를 등받이에 밀착시키고, 어깨가 앞으로 말리지 않게 가슴을 편 상태에서 손잡이를 앞으로 밀어줍니다.',
+                    '3. 주의·호흡: 팔꿈치를 완전히 락아웃(과신전)하지 말고 가슴 긴장을 유지하며 천천히 원위치로 돌아옵니다.'
+                ],
+                routine: '3~4세트 × 12~15회 (세트 간 휴식 60초)',
+                alternative: '머신 대기 시 → 덤벨 플랫 프레스 또는 푸쉬업으로 가슴 선피로 자극',
+                youtubeQuery: '체스트 프레스 머신 사용법 가슴운동 루틴'
+            },
+            {
+                id: 'legpress',
+                zone: 'machine',
+                zoneLabel: '머신 존',
+                name: '레그 프레스 & 레그 익스텐션 (Leg Machines)',
+                target: '대퇴사두근(앞벅지) · 둔근 · 햄스트링',
+                difficulty: '초중급 · 허리 부담 적은 하체운동',
+                icon: 'fa-gears',
+                steps: [
+                    '1. 세팅: 발판 중앙에 두 발을 어깨너비로 올리고, 엉덩이와 허리가 시트에서 뜨지 않도록 깊숙이 앉아 안전 잠금장치를 해제합니다.',
+                    '2. 동작: 무릎이 가슴 쪽으로 90도 정도 굽혀질 때까지 천천히 내린 후, 발뒤꿈치로 발판을 강하게 밀어 올립니다.',
+                    '3. 주의·호흡: 다리를 끝까지 펴서 무릎 관절이 꺾이지 않도록 살짝 구부린 상태를 유지하고, 밀어낼 때 강하게 내쉽니다.'
+                ],
+                routine: '4세트 × 12~15회 (세트 간 휴식 90초)',
+                alternative: '레그프레스 만석 시 → 레그 익스텐션 선피로 후 덤벨 워킹 런지로 대체',
+                youtubeQuery: '레그프레스 머신 사용법 발위치 하체운동 자세'
+            },
+            {
+                id: 'smithmachine',
+                zone: 'cable_smith',
+                zoneLabel: '케이블/스미스 존',
+                name: '스미스 머신 (Smith Machine)',
+                target: '인클라인 벤치프레스 · 스쿼트 · 숄더프레스',
+                difficulty: '초중급 · 수직 궤적 고정 보조 기구',
+                icon: 'fa-bars-staggered',
+                steps: [
+                    '1. 세팅: 바벨의 회전 후크를 돌려 걸쇠를 해제한 뒤, 바닥 양쪽의 안전 스토퍼(Stopper)를 가동범위 최저점 아래에 고정합니다.',
+                    '2. 동작: 인클라인 벤치를 30~45도로 세팅해 윗가슴 프레스를 하거나, 발을 반 보 앞으로 내딛고 안정적인 스쿼트를 수행합니다.',
+                    '3. 주의·호흡: 수직 궤적이 고정되어 있으므로 몸통 위치를 바벨 궤적에 맞게 먼저 세팅한 뒤 중량을 올리세요.'
+                ],
+                routine: '4세트 × 10~12회 (세트 간 휴식 90초)',
+                alternative: '스미스 머신 대기 시 → 덤벨 인클라인 프레스 또는 시티드 숄더프레스 머신 활용',
+                youtubeQuery: '스미스머신 사용법 안전장치 인클라인 벤치프레스'
+            },
+            {
+                id: 'cablecrossover',
+                zone: 'cable_smith',
+                zoneLabel: '케이블/스미스 존',
+                name: '케이블 크로스오버 / 푸쉬다운 (Cable Station)',
+                target: '가슴 안쪽 · 삼두근 · 후면삼각근(페이스풀)',
+                difficulty: '초중급 · 다목적 상체 고립 기구',
+                icon: 'fa-sliders',
+                steps: [
+                    '1. 세팅: 도르래(풀리) 높이를 목적에 맞게 조절합니다. (가슴 플라이는 어깨 높이, 삼두 푸쉬다운은 최상단 고정)',
+                    '2. 동작: 상체를 살짝 앞으로 기울여 중심을 잡고, 팔꿈치 위치를 고정한 상태에서 케이블 장력을 느끼며 당기거나 모읍니다.',
+                    '3. 주의·호흡: 원위치로 돌아갈 때 추(웨이트 블록)가 서로 부딪히지 않도록 끝까지 저항을 통제하세요.'
+                ],
+                routine: '3~4세트 × 12~15회 (세트 간 휴식 60초)',
+                alternative: '케이블 대기 시 → 덤벨 플라이(가슴) 또는 덤벨 오버헤드 익스텐션(삼두)으로 대체',
+                youtubeQuery: '케이블 크로스오버 푸쉬다운 사용법 상체운동'
+            },
+            {
+                id: 'treadmill_cardio',
+                zone: 'cardio',
+                zoneLabel: '유산소 존',
+                name: '트레드밀(런닝머신) & 천국의 계단 / 사이클',
+                target: '심폐지구력 · 체지방 연소 · 하체 근지구력',
+                difficulty: '초급 · 인클라인 걷기 추천',
+                icon: 'fa-person-running',
+                steps: [
+                    '1. 세팅: 안전 클립을 옷에 부착하고, 시작 버튼 후 속도 3.0~4.0km/h에서 천천히 발을 맞추며 워밍업을 시작합니다.',
+                    '2. 동작: 무릎 충격이 걱정된다면 달리기 대신 경사도(Incline) 10~12%, 속도 4.5~5.5km/h의 빠른 걷기를 수행합니다.',
+                    '3. 주의·호흡: 손잡이에 상체를 과하게 기대지 말고 바른 자세로 팔을 흔들며 리듬감 있게 호흡합니다.'
+                ],
+                routine: '20~35분 지속주 또는 인터벌 (근력 운동 후 마무리 유산소)',
+                alternative: '트레드밀 만석 시 → 입식/좌식 헬스 사이클 인터벌 20분 또는 매트 코어·버피 서킷',
+                youtubeQuery: '런닝머신 인클라인 걷기 천국의 계단 올바른 자세'
+            }
+        ];
+
+        // 분할별 운동 순서 변경 & 추천 루틴 데이터
+        const routineSplits = {
+            beginner: {
+                title: '초보자 전신 순환 루틴 (머신 위주 · 60분)',
+                badOrder: ['1. 스쿼트랙 / 벤치프레스 (초보자 세팅 어려움 & 피크타임 대기)', '2. 바벨 데드리프트 (허리 부상 위험)', '3. 턱걸이 (근력 부족 시 수행 불가)', '4. 복근 운동'],
+                goodOrder: [
+                    { step: '1단계 (하체 머신)', move: '레그 프레스 3세트 × 15회', reason: '등받이가 허리를 지지해 초보자도 안전하게 하체 전체를 단련합니다.' },
+                    { step: '2단계 (가슴 머신)', move: '시티드 체스트 프레스 3세트 × 15회', reason: '고정된 궤적으로 가슴 근육의 수축과 이완을 쉽게 익힐 수 있습니다.' },
+                    { step: '3단계 (등 머신)', move: '랫풀다운 머신 3세트 × 15회', reason: '체중보다 가벼운 무게로 설정해 광배근 자극을 정확히 느낄 수 있습니다.' },
+                    { step: '4단계 (유산소 마무리)', move: '트레드밀 인클라인 걷기 20분', reason: '경사도 8~10%, 속도 5.0km/h로 체지방 연소와 심폐지구력을 높입니다.' }
+                ]
+            },
+            push: {
+                title: '가슴 · 어깨 · 삼두 (미는 날)',
+                badOrder: ['1. 플랫 바벨 벤치프레스 (피크타임 대기 발생)', '2. 인클라인 덤벨 프레스 (벤치 자리 대기)', '3. 펙덱 플라이 머신', '4. 케이블 푸쉬다운'],
+                goodOrder: [
+                    { step: '1단계 (선피로)', move: '펙덱 플라이 머신 또는 덤벨 플라이', reason: '벤치프레스 대기를 피해 가슴 근육을 먼저 고립 자극합니다.' },
+                    { step: '2단계 (메인 대체)', move: '시티드 체스트 프레스 머신 또는 스미스 인클라인', reason: '바벨 벤치 대기 없이도 동일한 가슴 근비대 효과를 냅니다.' },
+                    { step: '3단계 (어깨 전환)', move: '사이드 레터럴 레이즈 (서서 진행)', reason: '벤치 자리가 필요 없는 스탠딩 덤벨 동작으로 휴식 시간을 단축합니다.' },
+                    { step: '4단계 (빈자리 공략)', move: '플랫 벤치프레스 또는 케이블 푸쉬다운 마무리', reason: '초반 붐비던 프리웨이트 구역이 비는 타이밍에 진입합니다.' }
+                ]
+            },
+            pull: {
+                title: '등 · 이두 · 후면삼각근 (당기는 날)',
+                badOrder: ['1. 랫풀다운 머신 (가장 인기 많은 머신 · 대기 발생)', '2. 바벨 데드리프트/바벨로우 (파워랙 대기)', '3. 시티드 케이블 로우', '4. 덤벨 컬'],
+                goodOrder: [
+                    { step: '1단계 (순서 역전)', move: '어시스트 풀업(턱걸이) 또는 스트레이트 암 풀다운', reason: '랫풀다운 대기열을 피해 광배근을 즉시 활성화합니다.' },
+                    { step: '2단계 (프리웨이트 대체)', move: '원암 덤벨 로우 또는 인클라인 덤벨 로우', reason: '파워랙 없이도 등 중앙부 두께감을 강력하게 타격합니다.' },
+                    { step: '3단계 (머신 진입)', move: '랫풀다운 / 시티드 로우 머신', reason: '앞 사람이 끝나는 타이밍에 맞춰 머신 루틴을 소화합니다.' },
+                    { step: '4단계 (팔/후면 마무리)', move: '이지바 컬 & 케이블 페이스풀 슈퍼세트', reason: '운동 시간을 줄이지 않고 밀도 있게 마무리합니다.' }
+                ]
+            },
+            legs: {
+                title: '하체 · 둔근 · 코어 (하체 날)',
+                badOrder: ['1. 파워랙 바벨 백스쿼트 (18~21시 대기 발생)', '2. 45도 레그프레스', '3. 레그 익스텐션', '4. 레그 컬'],
+                goodOrder: [
+                    { step: '1단계 (선피로 & 웜업)', move: '레그 익스텐션 & 레그 컬 (머신 존)', reason: '무릎 관절을 안전하게 예열하며 대퇴사두/햄스트링에 선피로를 줍니다.' },
+                    { step: '2단계 (스쿼트 대체)', move: '덤벨 불가리안 스플릿 스쿼트 또는 고블릿 스쿼트', reason: '파워렉이 만석일 때 하체와 둔근에 최고의 자극을 주는 대체 운동입니다.' },
+                    { step: '3단계 (고중량 프레스)', move: '레그 프레스 머신 4세트', reason: '선피로 이후 안전하게 하체 전체에 고중량 자극을 전달합니다.' },
+                    { step: '4단계 (코어 마무리)', move: '플랭크 & 행잉 니 레이즈 3세트', reason: '매트 존에서 복부와 코어를 안정적으로 마무리합니다.' }
+                ]
+            }
+        };
+
+        // =========================================================================
+        // 3. FIREBASE REAL-TIME SYNC SETUP (실시간 입·퇴실 인원 및 현장 투표 동기화)
+        // =========================================================================
+        let db = null;
+        let auth = null;
+        let currentUser = null;
+        let liveDocRef = null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'unigym-pulse-default';
+
+        let state = {
+            activeTab: 'dashboard',
+            isLiveTimeMode: true,
+            dayGroup: 'mon_thu',
+            selectedSlotId: 'mt-16',
+            selectedEquipmentZone: 'all',
+            selectedSplit: 'beginner',
+            // Real-time synced values from Firestore
+            activeCheckIns: 0,
+            totalCompletedSessions: 0,
+            totalDurationMinutes: 0,
+            voteOffset: 0,
+            lastLogMessage: '실시간 데이터베이스 연결 중...',
+            // User local check-in session (persisted in localStorage)
+            isCheckedIn: false,
+            checkInTimestamp: null
+        };
+
+        async function initFirebase() {
+            try {
+                if (typeof __firebase_config !== 'undefined') {
+                    const firebaseConfig = JSON.parse(__firebase_config);
+                    const app = initializeApp(firebaseConfig);
+                    db = getFirestore(app);
+                    auth = getAuth(app);
+
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                    currentUser = auth.currentUser;
+
+                    if (currentUser && db) {
+                        // Rule 1: Strict public data path
+                        liveDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'gym_live_state', 'current');
+                        const snap = await getDoc(liveDocRef);
+                        if (!snap.exists()) {
+                            await setDoc(liveDocRef, {
+                                activeCheckIns: 0,
+                                totalCompletedSessions: 0,
+                                totalDurationMinutes: 0,
+                                voteOffset: 0,
+                                lastLogMessage: '실시간 입·퇴실 및 현장 제보 시스템이 활성화되었습니다.',
+                                updatedAt: Date.now()
+                            });
+                        }
+
+                        // Real-time listener across all devices
+                        onSnapshot(liveDocRef, (docSnap) => {
+                            if (docSnap.exists()) {
+                                const data = docSnap.data();
+                                state.activeCheckIns = Math.max(0, data.activeCheckIns || 0);
+                                state.totalCompletedSessions = data.totalCompletedSessions || 0;
+                                state.totalDurationMinutes = data.totalDurationMinutes || 0;
+                                state.voteOffset = data.voteOffset || 0;
+                                if (data.lastLogMessage) {
+                                    state.lastLogMessage = data.lastLogMessage;
+                                }
+                                updateLiveStatsUI();
+                                updateAllViews();
+                            }
+                        }, (error) => {
+                            console.error("Firestore onSnapshot error:", error);
+                        });
+                    }
+                }
+            } catch (err) {
+                console.warn("Firebase offline fallback mode active:", err);
+            }
+        }
+
+        // =========================================================================
+        // 4. REAL-TIME OPERATING HOURS CHECKER (new Date() 연동)
+        // =========================================================================
+        function getRealTimeStatus() {
+            const now = new Date();
+            const day = now.getDay(); // 0: Sun, 1: Mon, ..., 6: Sat
+            const hour = now.getHours();
+            const min = now.getMinutes();
+
+            let dayGroupKey = 'mon_thu';
+            let isOpen = false;
+            let isClosingSoon = false;
+            let reason = 'open';
+            let scheduleText = '';
+
+            if (day === 6) {
+                dayGroupKey = 'sat';
+                isOpen = false;
+                reason = 'saturday_closed';
+                scheduleText = '토요일 정기 휴무일 (운영 안 함 · 일요일 14:00 오픈)';
+            } else if (day === 0) {
+                dayGroupKey = 'sun';
+                isOpen = (hour >= 14 && hour < 22);
+                isClosingSoon = (hour === 21);
+                reason = isOpen ? 'open' : (hour < 14 ? 'before_open' : 'after_close');
+                scheduleText = '일요일 운영시간: 14:00 ~ 22:00';
+            } else if (day === 5) {
+                dayGroupKey = 'fri';
+                isOpen = (hour >= 7 && hour < 19);
+                isClosingSoon = (hour === 18);
+                reason = isOpen ? 'open' : (hour < 7 ? 'before_open' : 'after_close');
+                scheduleText = '금요일 단축 운영시간: 07:00 ~ 19:00 (19시 조기 마감)';
+            } else {
+                dayGroupKey = 'mon_thu';
+                isOpen = (hour >= 7 && hour < 23);
+                isClosingSoon = (hour === 22);
+                reason = isOpen ? 'open' : (hour < 7 ? 'before_open' : 'after_close');
+                scheduleText = '평일(월~목) 운영시간: 07:00 ~ 23:00';
+            }
+
+            return { now, day, hour, min, dayGroupKey, isOpen, isClosingSoon, reason, scheduleText };
+        }
+
+        function updateOperatingStatusBanner() {
+            const info = getRealTimeStatus();
+            const dayNames = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+            const timeStr = `${String(info.hour).padStart(2, '0')}:${String(info.min).padStart(2, '0')}`;
+
+            document.getElementById('real-clock-text').textContent = `현재 시각: ${dayNames[info.day]} ${timeStr}`;
+
+            const badge = document.getElementById('op-status-badge');
+            const desc = document.getElementById('op-status-desc');
+            const iconBox = document.getElementById('op-status-icon-box');
+
+            if (info.day === 6) {
+                badge.textContent = '정기 휴무';
+                badge.className = 'text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30';
+                iconBox.className = 'w-11 h-11 rounded-2xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center shrink-0 text-rose-400';
+                iconBox.innerHTML = '<i class="fa-solid fa-ban text-lg"></i>';
+            } else if (!info.isOpen) {
+                badge.textContent = '현재 운영 종료';
+                badge.className = 'text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600';
+                iconBox.className = 'w-11 h-11 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 text-slate-400';
+                iconBox.innerHTML = '<i class="fa-solid fa-door-closed text-lg"></i>';
+            } else if (info.isClosingSoon) {
+                badge.textContent = '곧 마감 (1시간 이내)';
+                badge.className = 'text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30';
+                iconBox.className = 'w-11 h-11 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0 text-amber-400';
+                iconBox.innerHTML = '<i class="fa-solid fa-hourglass-end text-lg"></i>';
+            } else {
+                badge.textContent = '현재 정상 운영 중';
+                badge.className = 'text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+                iconBox.className = 'w-11 h-11 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0 text-emerald-400';
+                iconBox.innerHTML = '<i class="fa-solid fa-door-open text-lg"></i>';
+            }
+
+            desc.textContent = info.scheduleText;
+        }
+
+        // =========================================================================
+        // 5. CHECK-IN / CHECK-OUT & REAL QR CODE GENERATION
+        // =========================================================================
+        function restoreLocalCheckInSession() {
+            const savedCheckIn = localStorage.getItem('unigym_checkin_ts');
+            if (savedCheckIn) {
+                const ts = parseInt(savedCheckIn, 10);
+                // 4시간 이상 지난 오래된 세션은 자동 만료 처리
+                if (Date.now() - ts < 4 * 60 * 60 * 1000) {
+                    state.isCheckedIn = true;
+                    state.checkInTimestamp = ts;
+                } else {
+                    localStorage.removeItem('unigym_checkin_ts');
+                }
+            }
+            updateCheckInButtonsUI();
+        }
+
+        window.toggleCheckIn = async function() {
+            if (!state.isCheckedIn) {
+                // 입실 체크인 실행 (+1명 가산)
+                const nowTs = Date.now();
+                state.isCheckedIn = true;
+                state.checkInTimestamp = nowTs;
+                localStorage.setItem('unigym_checkin_ts', String(nowTs));
+
+                const timeStr = new Date(nowTs).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+                const logMsg = `학우 1명이 QR 입실 체크인했습니다 (${timeStr})`;
+
+                state.activeCheckIns += 1;
+                state.lastLogMessage = logMsg;
+
+                if (liveDocRef && currentUser) {
+                    try {
+                        await updateDoc(liveDocRef, {
+                            activeCheckIns: increment(1),
+                            lastLogMessage: logMsg,
+                            updatedAt: nowTs
+                        });
+                    } catch (e) { console.error(e); }
+                }
+
+                showToast('입실 체크인 완료! 실시간 이용 인원(+1명)과 혼잡도 게이지에 즉시 반영되었습니다.', 'emerald');
+            } else {
+                // 퇴실 체크아웃 실행 (-1명 차감 + 평균 운동시간 반영)
+                const nowTs = Date.now();
+                const startTs = state.checkInTimestamp || (nowTs - 60 * 60 * 1000);
+                const durationMins = Math.max(1, Math.round((nowTs - startTs) / 60000));
+                const timeStr = new Date(nowTs).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+
+                state.isCheckedIn = false;
+                state.checkInTimestamp = null;
+                localStorage.removeItem('unigym_checkin_ts');
+
+                const logMsg = `학우 1명이 퇴실 체크아웃했습니다 (${timeStr} · 운동 ${durationMins}분)`;
+
+                state.activeCheckIns = Math.max(0, state.activeCheckIns - 1);
+                state.totalCompletedSessions += 1;
+                state.totalDurationMinutes += durationMins;
+                state.lastLogMessage = logMsg;
+
+                if (liveDocRef && currentUser) {
+                    try {
+                        await updateDoc(liveDocRef, {
+                            activeCheckIns: increment(-1),
+                            totalCompletedSessions: increment(1),
+                            totalDurationMinutes: increment(durationMins),
+                            lastLogMessage: logMsg,
+                            updatedAt: nowTs
+                        });
+                    } catch (e) { console.error(e); }
+                }
+
+                showToast(`퇴실 체크아웃 완료! 이용 인원에서 차감되었으며 운동 시간(${durationMins}분)이 기록되었습니다.`, 'blue');
+            }
+
+            updateCheckInButtonsUI();
+            updateLiveStatsUI();
+            updateAllViews();
+        };
+
+        function updateCheckInButtonsUI() {
+            const hBtn = document.getElementById('header-checkin-btn');
+            const hText = document.getElementById('header-checkin-text');
+            const hIcon = document.getElementById('header-checkin-icon');
+            const mBtn = document.getElementById('mobile-floating-checkin-btn');
+            const banner = document.getElementById('my-session-banner');
+            const modalStatus = document.getElementById('modal-checkin-status');
+            const modalBtn = document.getElementById('modal-checkin-action-btn');
+
+            if (state.isCheckedIn && state.checkInTimestamp) {
+                hBtn.className = 'px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-rose-500 hover:bg-rose-400 text-white shadow-lg shadow-rose-500/20 transition-all flex items-center gap-1.5';
+                hIcon.className = 'fa-solid fa-right-from-bracket';
+                hText.textContent = '퇴실 체크아웃';
+
+                if (mBtn) {
+                    mBtn.className = 'px-4 py-2.5 rounded-xl bg-rose-500 text-white font-extrabold text-xs shadow-lg';
+                    mBtn.textContent = '퇴실 체크아웃';
+                }
+
+                banner.classList.remove('hidden');
+                const tStr = new Date(state.checkInTimestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+                document.getElementById('my-checkin-time-display').textContent = tStr;
+                updateElapsedTimer();
+
+                modalStatus.textContent = `입실 완료 (${tStr} 입실 · 현재 운동 중)`;
+                modalStatus.className = 'font-bold text-emerald-400';
+                modalBtn.className = 'flex-1 py-3 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold text-sm transition-all';
+                modalBtn.innerHTML = '<i class="fa-solid fa-right-from-bracket mr-1.5"></i>퇴실 체크아웃 하기';
+            } else {
+                hBtn.className = 'px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-1.5';
+                hIcon.className = 'fa-solid fa-right-to-bracket';
+                hText.textContent = '입실 체크인';
+
+                if (mBtn) {
+                    mBtn.className = 'px-4 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-extrabold text-xs shadow-lg';
+                    mBtn.textContent = '입실 체크인';
+                }
+
+                banner.classList.add('hidden');
+
+                modalStatus.textContent = '미입실 (체크인 전)';
+                modalStatus.className = 'font-bold text-slate-200';
+                modalBtn.className = 'flex-1 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-all';
+                modalBtn.innerHTML = '<i class="fa-solid fa-check mr-1.5"></i>지금 바로 입실 체크인';
+            }
+        }
+
+        function updateElapsedTimer() {
+            const el = document.getElementById('my-elapsed-time-display');
+            if (!el || !state.isCheckedIn || !state.checkInTimestamp) return;
+            const diffSec = Math.max(0, Math.floor((Date.now() - state.checkInTimestamp) / 1000));
+            const hrs = String(Math.floor(diffSec / 3600)).padStart(2, '0');
+            const mins = String(Math.floor((diffSec % 3600) / 60)).padStart(2, '0');
+            const secs = String(diffSec % 60).padStart(2, '0');
+            el.textContent = `${hrs}:${mins}:${secs}`;
+        }
+
+        window.voteCongestion = async function(type) {
+            let delta = 0;
+            let label = '';
+            let color = 'emerald';
+
+            if (type === 'relaxed') { delta = -2; label = '쾌적해요'; color = 'emerald'; }
+            else if (type === 'normal') { delta = 1; label = '보통이에요'; color = 'blue'; }
+            else if (type === 'crowded') { delta = 3; label = '조금 붐벼요'; color = 'amber'; }
+            else if (type === 'very_crowded') { delta = 5; label = '매우 혼잡해요'; color = 'rose'; }
+
+            const logMsg = `현장 체감 제보: "${label}" 상태가 실시간 혼잡도에 반영되었습니다.`;
+            state.voteOffset = Math.max(-15, Math.min(20, state.voteOffset + delta));
+            state.lastLogMessage = logMsg;
+
+            if (liveDocRef && currentUser) {
+                try {
+                    await updateDoc(liveDocRef, {
+                        voteOffset: state.voteOffset,
+                        lastLogMessage: logMsg,
+                        updatedAt: Date.now()
+                    });
+                } catch (e) { console.error(e); }
+            }
+
+            showToast(logMsg, color);
+            updateLiveStatsUI();
+            updateAllViews();
+        };
+
+        function updateLiveStatsUI() {
+            document.getElementById('live-active-users-count').textContent = `${state.activeCheckIns}명`;
+            document.getElementById('live-total-sessions-count').textContent = `${state.totalCompletedSessions}건`;
+            document.getElementById('live-activity-ticker').textContent = state.lastLogMessage;
+            document.getElementById('live-checkin-delta-label').textContent = `현재 ${state.activeCheckIns}명 입실 중`;
+
+            // 평균 운동시간: 기본 예측치(75분) + 실측 퇴실 데이터 가중 평균
+            const baseTotalMins = 20 * 75;
+            const combinedCount = 20 + state.totalCompletedSessions;
+            const avgMins = Math.round((baseTotalMins + state.totalDurationMinutes) / combinedCount);
+            document.getElementById('live-avg-duration-badge').innerHTML = `<i class="fa-regular fa-hourglass-half mr-1"></i>${avgMins}분`;
+        }
+
+        // Actual Scannable QR Code Generator using window.location.href
+        window.openQrModal = function() {
+            document.getElementById('qr-modal').classList.remove('hidden');
+            generateRealQrCode('checkin');
+        };
+
+        window.closeQrModal = function() {
+            document.getElementById('qr-modal').classList.add('hidden');
+        };
+
+        window.generateRealQrCode = function(mode) {
+            const btnCheckin = document.getElementById('qr-mode-checkin');
+            const btnView = document.getElementById('qr-mode-view');
+
+            if (mode === 'checkin') {
+                btnCheckin.className = 'flex-1 py-1.5 rounded-lg font-bold bg-emerald-500 text-slate-950 transition-all';
+                btnView.className = 'flex-1 py-1.5 rounded-lg font-bold text-slate-400 hover:text-white transition-all';
+            } else {
+                btnView.className = 'flex-1 py-1.5 rounded-lg font-bold bg-emerald-500 text-slate-950 transition-all';
+                btnCheckin.className = 'flex-1 py-1.5 rounded-lg font-bold text-slate-400 hover:text-white transition-all';
+            }
+
+            const urlObj = new URL(window.location.href);
+            if (mode === 'checkin') {
+                urlObj.searchParams.set('action', 'checkin');
+            } else {
+                urlObj.searchParams.delete('action');
+            }
+            const targetUrl = urlObj.toString();
+
+            document.getElementById('qr-target-url-input').value = targetUrl;
+
+            const qrContainer = document.getElementById('qrcode-canvas');
+            qrContainer.innerHTML = '';
+            new QRCode(qrContainer, {
+                text: targetUrl,
+                width: 176,
+                height: 176,
+                colorDark: "#0B0F19",
+                colorLight: "#FFFFFF",
+                correctLevel: QRCode.CorrectLevel.M
+            });
+        };
+
+        window.copyShareUrl = function() {
+            const input = document.getElementById('qr-target-url-input');
+            input.select();
+            input.setSelectionRange(0, 99999);
+            try {
+                document.execCommand('copy');
+                showToast('실제 접속 링크가 클립보드에 복사되었습니다!', 'emerald');
+            } catch (e) {
+                showToast('링크 복사 중 오류가 발생했습니다.', 'rose');
+            }
+        };
+
+        function handleQrScanArrival() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('action') === 'checkin') {
+                const cleanUrl = new URL(window.location.href);
+                cleanUrl.searchParams.delete('action');
+                window.history.replaceState({}, '', cleanUrl.toString());
+
+                if (!state.isCheckedIn) {
+                    setTimeout(() => {
+                        toggleCheckIn();
+                    }, 500);
+                } else {
+                    showToast('이미 QR 입실 체크인 상태입니다! 운동 후 퇴실 버튼을 눌러주세요.', 'blue');
+                }
+            }
+        }
+
+        // =========================================================================
+        // 6. UI NAVIGATION & TIME SIMULATOR CONTROLLERS
+        // =========================================================================
+        window.switchTab = function(tabName) {
+            state.activeTab = tabName;
+            const tabs = ['dashboard', 'zones'];
+            tabs.forEach(t => {
+                const section = document.getElementById(`tab-${t}`);
+                const dBtn = document.getElementById(`nav-${t}`);
+                const mBtn = document.getElementById(`m-nav-${t}`);
+
+                if (t === tabName) {
+                    section.classList.remove('hidden');
+                    if (dBtn) dBtn.className = 'nav-btn px-4 py-2 rounded-lg text-sm font-bold transition-all bg-emerald-500 text-slate-950 shadow-md';
+                    if (mBtn) mBtn.className = 'flex-1 py-1.5 rounded-lg text-xs font-bold text-center transition-all bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+                } else {
+                    section.classList.add('hidden');
+                    if (dBtn) dBtn.className = 'nav-btn px-4 py-2 rounded-lg text-sm font-semibold text-slate-300 hover:text-white transition-all';
+                    if (mBtn) mBtn.className = 'flex-1 py-1.5 rounded-lg text-xs font-medium text-slate-400 text-center transition-all';
+                }
+            });
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+
+        window.setDayGroup = function(groupKey, isLiveSync = false) {
+            state.dayGroup = groupKey;
+            state.isLiveTimeMode = isLiveSync;
+
+            ['mon_thu', 'fri', 'sat', 'sun'].forEach(k => {
+                const btn = document.getElementById(`btn-${k}`);
+                if (k === groupKey) {
+                    btn.className = 'day-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white transition-all';
+                } else {
+                    btn.className = 'day-btn px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition-all';
+                }
+            });
+
+            if (!isLiveSync) {
+                if (groupKey === 'mon_thu') state.selectedSlotId = 'mt-19';
+                else if (groupKey === 'fri') state.selectedSlotId = 'fri-17';
+                else if (groupKey === 'sat') state.selectedSlotId = 'sat-closed';
+                else if (groupKey === 'sun') state.selectedSlotId = 'sun-14';
+            }
+
+            populateTimeSlotDropdown();
+            updateAllViews();
+        };
+
+        function populateTimeSlotDropdown() {
+            const select = document.getElementById('time-slot-select');
+            const slots = operatingSchedule[state.dayGroup].slots;
+            select.innerHTML = slots.map(slot => {
+                const estPct = slot.id === 'sat-closed' ? 0 : Math.min(100, Math.round((slot.baseHeadcount / MAX_CAPACITY) * 100));
+                return `<option value="${slot.id}" ${slot.id === state.selectedSlotId ? 'selected' : ''}>
+                    ${slot.label} ${slot.id === 'sat-closed' ? '' : `(예상 혼잡도 ${estPct}%)`}
+                </option>`;
+            }).join('');
+        }
+
+        window.onTimeSlotChange = function(slotId, isLiveSync = false) {
+            state.selectedSlotId = slotId;
+            state.isLiveTimeMode = isLiveSync;
+            populateTimeSlotDropdown();
+            updateAllViews();
+        };
+
+        window.handleRecommendationClick = function(slotId) {
+            if (slotId === 'sun-open') {
+                setDayGroup('sun', false);
+                showToast('일요일 운영시간(14:00~22:00)으로 전환되었습니다.', 'blue');
+                return;
+            }
+            if (slotId === 'home-guide') {
+                switchTab('zones');
+                showToast('기구 사용설명서 및 대체 운동 루틴을 확인해보세요!', 'emerald');
+                return;
+            }
+            if (slotId === 'sat-closed') return;
+
+            onTimeSlotChange(slotId, false);
+            showToast('선택하신 추천 시간대 혼잡도가 반영되었습니다.', 'emerald');
+        };
+
+        // 실제 JavaScript new Date()를 읽어 현재 요일 및 시각과 즉시 동기화
+        window.syncWithRealCurrentTime = function(showAlertToast = false) {
+            const info = getRealTimeStatus();
+            state.isLiveTimeMode = true;
+            state.dayGroup = info.dayGroupKey;
+
+            ['mon_thu', 'fri', 'sat', 'sun'].forEach(k => {
+                const btn = document.getElementById(`btn-${k}`);
+                if (k === info.dayGroupKey) {
+                    btn.className = 'day-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white transition-all';
+                } else {
+                    btn.className = 'day-btn px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition-all';
+                }
+            });
+
+            const slots = operatingSchedule[info.dayGroupKey].slots;
+            if (info.dayGroupKey === 'sat') {
+                state.selectedSlotId = 'sat-closed';
+            } else {
+                // 현재 시각(hour)과 일치하는 슬롯 탐색, 운영시간 외일 경우 가장 가까운 슬롯 선택
+                const matched = slots.find(s => s.hour === info.hour);
+                if (matched) {
+                    state.selectedSlotId = matched.id;
+                } else if (info.reason === 'before_open') {
+                    state.selectedSlotId = slots[0].id;
+                } else {
+                    state.selectedSlotId = slots[slots.length - 1].id;
+                }
+            }
+
+            populateTimeSlotDropdown();
+            updateAllViews();
+
+            if (showAlertToast) {
+                const dayNames = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+                const timeStr = `${String(info.hour).padStart(2, '0')}:${String(info.min).padStart(2, '0')}`;
+                if (info.isOpen) {
+                    showToast(`현재 시각(${dayNames[info.day]} ${timeStr}) 실시간 혼잡도와 연동되었습니다.`, 'emerald');
+                } else {
+                    showToast(`현재 시각(${dayNames[info.day]} ${timeStr})은 헬스장 운영 종료(또는 휴무) 시간입니다.`, 'amber');
+                }
+            }
+        };
+
+        function getCurrentSlotObject() {
+            const slots = operatingSchedule[state.dayGroup].slots;
+            return slots.find(s => s.id === state.selectedSlotId) || slots[0];
+        }
+
+        function updateAllViews() {
+            const groupData = operatingSchedule[state.dayGroup];
+            const slot = getCurrentSlotObject();
+            const liveStatus = getRealTimeStatus();
+
+            // Update Mode Pill
+            const modePill = document.getElementById('sync-mode-pill');
+            if (state.isLiveTimeMode) {
+                modePill.textContent = '실시간 현재 시각 연동됨';
+                modePill.className = 'text-[11px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30';
+            } else {
+                modePill.textContent = '시간대 시뮬레이션 조회 중';
+                modePill.className = 'text-[11px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold border border-blue-500/30';
+            }
+
+            // Determine if currently showing a closed state
+            const isOutOfHoursNow = (state.isLiveTimeMode && !liveStatus.isOpen);
+            const showClosed = groupData.isClosed || isOutOfHoursNow;
+
+            const closedBanner = document.getElementById('closed-notice-banner');
+            if (showClosed) {
+                closedBanner.classList.remove('hidden');
+                if (groupData.isClosed) {
+                    document.getElementById('closed-banner-badge').innerHTML = '<i class="fa-solid fa-ban"></i> 매주 토요일 정기 휴무 안내';
+                    document.getElementById('closed-banner-title').textContent = '토요일은 헬스장 정기 휴무일입니다 (운영 안 함)';
+                    document.getElementById('closed-banner-desc').textContent = '시설 점검 및 방역을 위해 토요일 전 시간대 헬스장을 운영하지 않습니다. 일요일 오픈 시간(14:00 ~ 22:00)을 이용하거나 기구 사용설명서 탭에서 대체 루틴을 확인해보세요!';
+                } else {
+                    document.getElementById('closed-banner-badge').innerHTML = '<i class="fa-solid fa-door-closed"></i> 현재 운영 종료 시간 안내';
+                    document.getElementById('closed-banner-title').textContent = `현재 시각(${String(liveStatus.hour).padStart(2, '0')}:${String(liveStatus.min).padStart(2, '0')})은 헬스장 운영 시간이 아닙니다`;
+                    document.getElementById('closed-banner-desc').textContent = `${liveStatus.scheduleText} 입니다. 상단 요일·시간대 시뮬레이터에서 원하는 시간대를 선택해 예상 혼잡도를 미리 확인해보세요!`;
+                }
+            } else {
+                closedBanner.classList.add('hidden');
+            }
+
+            // Calculate Headcount & Congestion Percentage
+            let currentCount = 0;
+            let pct = 0;
+            if (!showClosed) {
+                currentCount = Math.max(0, Math.min(MAX_CAPACITY + 5, slot.baseHeadcount + state.activeCheckIns + state.voteOffset));
+                pct = Math.min(100, Math.round((currentCount / MAX_CAPACITY) * 100));
+            }
+
+            // Determine Status Level (쾌적 / 보통 / 혼잡 / 매우 혼잡 / 운영 종료)
+            let levelInfo = {};
+            if (groupData.isClosed) {
+                levelInfo = { text: '정기 휴무', emoji: '🚫', colorHex: '#64748B', textClass: 'text-slate-400', glowClass: 'bg-slate-500/10' };
+            } else if (isOutOfHoursNow) {
+                levelInfo = { text: '운영 종료', emoji: '🌙', colorHex: '#64748B', textClass: 'text-slate-400', glowClass: 'bg-slate-500/10' };
+            } else if (pct < 35) {
+                levelInfo = { text: '쾌적', emoji: '😊', colorHex: '#10B981', textClass: 'text-emerald-400', glowClass: 'bg-emerald-500/15' };
+            } else if (pct < 65) {
+                levelInfo = { text: '보통', emoji: '🙂', colorHex: '#3B82F6', textClass: 'text-blue-400', glowClass: 'bg-blue-500/15' };
+            } else if (pct < 85) {
+                levelInfo = { text: '혼잡', emoji: '😅', colorHex: '#F59E0B', textClass: 'text-amber-400', glowClass: 'bg-amber-500/15' };
+            } else {
+                levelInfo = { text: '매우 혼잡', emoji: '🔥', colorHex: '#EF4444', textClass: 'text-red-400', glowClass: 'bg-red-500/15' };
+            }
+
+            // Update Gauge Card
+            document.getElementById('display-time-label').textContent = isOutOfHoursNow 
+                ? `${liveStatus.scheduleText} · 현재 운영 외 시간` 
+                : `${slot.label}`;
+            document.getElementById('status-emoji').textContent = levelInfo.emoji;
+
+            const statusBadge = document.getElementById('status-badge-text');
+            statusBadge.textContent = levelInfo.text;
+            statusBadge.className = `text-2xl font-black tracking-tight ${levelInfo.textClass}`;
+
+            document.getElementById('current-headcount').textContent = currentCount;
+            document.getElementById('congestion-percent-text').textContent = groupData.isClosed 
+                ? '토요일 휴무 (운영 안 함)' 
+                : isOutOfHoursNow 
+                    ? '현재 운영 종료 (0명)' 
+                    : `혼잡도 ${pct}%`;
+
+            // Update Mobile Floating Status
+            const mStatus = document.getElementById('mobile-bar-status');
+            if (mStatus) {
+                mStatus.textContent = showClosed ? `${levelInfo.text}` : `${levelInfo.text} (${currentCount}/${MAX_CAPACITY}명)`;
+            }
+
+            // Update SVG Gauge Stroke
+            const circle = document.getElementById('gauge-circle');
+            const circumference = 515.22;
+            const offset = circumference - (pct / 100) * circumference;
+            circle.style.strokeDashoffset = offset;
+            circle.style.stroke = levelInfo.colorHex;
+
+            const glow = document.getElementById('status-glow');
+            glow.className = `absolute -top-24 -right-24 w-56 h-56 ${levelInfo.glowClass} rounded-full blur-3xl pointer-events-none transition-all duration-700`;
+
+            // Update Footnote inside Gauge Card
+            const basePct = Math.round((slot.baseHeadcount / MAX_CAPACITY) * 100);
+            const densityText = basePct >= 75 ? '높음 (피크타임)' : basePct >= 40 ? '보통' : '낮음 (여유)';
+            document.getElementById('time-density-label').textContent = showClosed ? '운영 시간 외' : `${densityText} · 기본 예측 ${basePct}%`;
+            document.getElementById('status-advice-text').textContent = isOutOfHoursNow 
+                ? '현재 운영 종료 시간입니다. 위 시뮬레이터에서 다른 시간대를 선택해 예상 혼잡도를 조회할 수 있습니다.' 
+                : slot.advice;
+
+            // Update Dynamic Top 3 Recommendations for Selected Day Group
+            document.getElementById('rec-day-subtitle').textContent = `${groupData.groupName} 맞춤 추천`;
+            const recGrid = document.getElementById('dynamic-recommendations-grid');
+            recGrid.innerHTML = groupData.recommendations.map(rec => `
+                <div onclick="handleRecommendationClick('${rec.slotId}')" class="cursor-pointer group rounded-2xl p-3.5 bg-slate-900/80 border border-slate-800 ${rec.hoverClass} transition-all">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-[11px] font-bold px-2 py-0.5 rounded ${rec.badgeClass}">${rec.tag}</span>
+                        <i class="fa-solid fa-chevron-right text-xs text-slate-600 group-hover:text-white transition-colors"></i>
+                    </div>
+                    <p class="text-sm font-extrabold text-white">${rec.title}</p>
+                    <p class="text-xs text-slate-400 mt-1">${rec.desc}</p>
+                </div>
+            `).join('');
+
+            renderHourlyBarChart();
+        }
+
+        function renderHourlyBarChart() {
+            const groupData = operatingSchedule[state.dayGroup];
+            const slots = groupData.slots;
+
+            document.getElementById('chart-section-title').textContent = `${groupData.shortTitle} 1시간 단위 혼잡도 추이`;
+
+            const barsGrid = document.getElementById('hourly-bars-grid');
+            const labelsGrid = document.getElementById('hourly-labels-grid');
+
+            barsGrid.style.gridTemplateColumns = `repeat(${slots.length}, minmax(0, 1fr))`;
+            labelsGrid.style.gridTemplateColumns = `repeat(${slots.length}, minmax(0, 1fr))`;
+
+            barsGrid.innerHTML = slots.map(slot => {
+                const isSelected = (slot.id === state.selectedSlotId);
+                const estCount = groupData.isClosed ? 0 : Math.max(0, Math.min(MAX_CAPACITY + 5, slot.baseHeadcount + state.activeCheckIns + state.voteOffset));
+                const estPct = groupData.isClosed ? 0 : Math.min(100, Math.round((estCount / MAX_CAPACITY) * 100));
+                const barHeight = groupData.isClosed ? 6 : Math.max(10, estPct);
+
+                let barColor = 'bg-emerald-500/85 group-hover:bg-emerald-400';
+                let pctTextColor = 'text-emerald-400';
+                if (estPct >= 85) {
+                    barColor = 'bg-rose-500 group-hover:bg-rose-400';
+                    pctTextColor = 'text-rose-400';
+                } else if (estPct >= 65) {
+                    barColor = 'bg-amber-500 group-hover:bg-amber-400';
+                    pctTextColor = 'text-amber-400';
+                } else if (estPct >= 35) {
+                    barColor = 'bg-blue-500 group-hover:bg-blue-400';
+                    pctTextColor = 'text-blue-400';
+                }
+
+                return `
+                    <div onclick="onTimeSlotChange('${slot.id}', false)" 
+                         class="h-full flex flex-col justify-end items-center cursor-pointer group px-1 py-1 rounded-t-xl transition-all ${isSelected ? 'bg-slate-800/90 ring-1 ring-emerald-500/60' : 'hover:bg-slate-900/60'}">
+                        <div class="text-[10px] sm:text-[11px] font-bold mb-1.5 ${groupData.isClosed ? 'text-slate-400' : pctTextColor}">
+                            ${groupData.isClosed ? '휴무' : `${estPct}%`}
+                        </div>
+                        <div class="w-full max-w-[34px] flex items-end justify-center h-40">
+                            <div class="w-full ${groupData.isClosed ? 'bg-slate-700' : barColor} rounded-t-md bar-transition" 
+                                 style="height: ${barHeight}%" title="${slot.label}: 예상 ${estCount}명 (${estPct}%)"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            labelsGrid.innerHTML = slots.map(slot => {
+                const isSelected = (slot.id === state.selectedSlotId);
+                return `
+                    <div onclick="onTimeSlotChange('${slot.id}', false)" 
+                         class="cursor-pointer text-[11px] sm:text-xs font-semibold truncate py-1.5 rounded ${isSelected ? 'text-emerald-400 font-extrabold bg-emerald-500/10' : 'text-slate-400 hover:text-slate-200'}">
+                        ${slot.shortLabel}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // =========================================================================
+        // 7. EQUIPMENT MANUALS & YOUTUBE GUIDE RENDERING (가짜 점유율 제거)
+        // =========================================================================
+        window.filterEquipmentZone = function(zoneKey) {
+            state.selectedEquipmentZone = zoneKey;
+            ['all', 'freeweight', 'machine', 'cable_smith', 'cardio'].forEach(k => {
+                const btn = document.getElementById(`zfilter-${k}`);
+                if (k === zoneKey) {
+                    btn.className = 'zfilter-btn px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500 text-slate-950 transition-all';
+                } else {
+                    btn.className = 'zfilter-btn px-3 py-1.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white transition-all';
+                }
+            });
+            renderEquipmentManuals();
+        };
+
+        window.toggleManualDetails = function(eqId) {
+            const box = document.getElementById(`manual-steps-${eqId}`);
+            const icon = document.getElementById(`manual-chevron-${eqId}`);
+            if (!box) return;
+            box.classList.toggle('hidden');
+            if (icon) {
+                icon.classList.toggle('rotate-180');
+            }
+        };
+
+        function renderEquipmentManuals() {
+            const container = document.getElementById('equipment-manuals-grid');
+            const filtered = state.selectedEquipmentZone === 'all' 
+                ? equipmentManuals 
+                : equipmentManuals.filter(item => item.zone === state.selectedEquipmentZone);
+
+            container.innerHTML = filtered.map(eq => {
+                const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(eq.youtubeQuery)}`;
+                return `
+                    <div class="glass-panel rounded-3xl p-6 border border-slate-800 flex flex-col justify-between space-y-4 hover:border-slate-700 transition-all">
+                        <div class="space-y-4">
+                            <!-- Card Top Header -->
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-11 h-11 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-emerald-400 shrink-0">
+                                        <i class="fa-solid ${eq.icon} text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <div class="flex flex-wrap items-center gap-1.5 mb-1">
+                                            <span class="text-[11px] font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300">${eq.zoneLabel}</span>
+                                            <span class="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-300">${eq.difficulty}</span>
+                                        </div>
+                                        <h3 class="text-base sm:text-lg font-extrabold text-white">${eq.name}</h3>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Target Muscle & Recommended Routine -->
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+                                    <span class="text-slate-400 block text-[11px]">주요 타겟 근육</span>
+                                    <span class="font-bold text-white mt-0.5 block">${eq.target}</span>
+                                </div>
+                                <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800">
+                                    <span class="text-slate-400 block text-[11px]">추천 세트 & 휴식</span>
+                                    <span class="font-bold text-emerald-400 mt-0.5 block">${eq.routine}</span>
+                                </div>
+                            </div>
+
+                            <!-- Accordion Toggle + 3-Step Usage Manual -->
+                            <div class="bg-slate-950/70 rounded-2xl border border-slate-800/80 overflow-hidden">
+                                <button onclick="toggleManualDetails('${eq.id}')" class="w-full p-3.5 flex items-center justify-between text-left hover:bg-slate-900/60 transition-colors">
+                                    <span class="text-xs font-extrabold text-slate-200 flex items-center gap-1.5">
+                                        <i class="fa-solid fa-list-ol text-emerald-400"></i>3단계 사용 설명서 (세팅 · 동작 · 주의사항)
+                                    </span>
+                                    <i id="manual-chevron-${eq.id}" class="fa-solid fa-chevron-down text-xs text-slate-400 transition-transform duration-200 rotate-180"></i>
+                                </button>
+                                <div id="manual-steps-${eq.id}" class="px-4 pb-4 pt-1 border-t border-slate-800/60">
+                                    <ul class="space-y-2 text-xs text-slate-300 leading-relaxed">
+                                        ${eq.steps.map(step => `<li>${step}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <!-- Crowded Alternative Tip -->
+                            <div class="flex items-start gap-2.5 text-xs bg-amber-950/25 p-3 rounded-2xl border border-amber-500/25">
+                                <i class="fa-solid fa-shuffle text-amber-400 mt-0.5 shrink-0"></i>
+                                <div>
+                                    <span class="font-bold text-amber-300">혼잡 시 대체 운동 팁:</span>
+                                    <span class="text-slate-300 ml-1">${eq.alternative}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- YouTube Video Guide Link Button -->
+                        <div class="pt-1">
+                            <a href="${ytUrl}" target="_blank" rel="noopener noreferrer" 
+                               class="w-full py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-600/20">
+                                <i class="fa-brands fa-youtube text-lg"></i>
+                                <span>유튜브 운동 자세 영상 가이드 보기</span>
+                                <i class="fa-solid fa-arrow-up-right-from-square text-xs opacity-80"></i>
+                            </a>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 분할별 운동 순서 변경 시뮬레이터 렌더링
+        window.selectRoutineSplit = function(splitKey) {
+            state.selectedSplit = splitKey;
+            ['beginner', 'push', 'pull', 'legs'].forEach(k => {
+                const btn = document.getElementById(`split-${k}`);
+                if (k === splitKey) {
+                    btn.className = 'split-btn px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500 text-slate-950 transition-all';
+                } else {
+                    btn.className = 'split-btn px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition-all';
+                }
+            });
+            renderRoutineOptimizer();
+        };
+
+        function renderRoutineOptimizer() {
+            const data = routineSplits[state.selectedSplit];
+            const container = document.getElementById('routine-sequence-content');
+
+            container.innerHTML = `
+                <div class="rounded-2xl bg-slate-900/70 p-5 border border-rose-500/20 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold px-2.5 py-1 rounded bg-rose-500/20 text-rose-400">❌ 피크타임 일반 순서 (대기 발생)</span>
+                        <span class="text-xs text-slate-400">${data.title}</span>
+                    </div>
+                    <ul class="space-y-2.5 text-xs sm:text-sm text-slate-300 pt-1">
+                        ${data.badOrder.map(item => `
+                            <li class="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 flex items-center gap-2.5">
+                                <i class="fa-regular fa-clock text-rose-400"></i>
+                                <span>${item}</span>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+
+                <div class="rounded-2xl bg-emerald-950/20 p-5 border border-emerald-500/30 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-400">✅ 스마트 순서 변경 & 대체 루틴 (대기 0분)</span>
+                        <span class="text-xs text-emerald-300 font-semibold">대기 없는 추천 루틴</span>
+                    </div>
+                    <div class="space-y-2.5 pt-1">
+                        ${data.goodOrder.map(item => `
+                            <div class="p-3 rounded-xl bg-slate-900/95 border border-slate-800 space-y-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[11px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400">${item.step}</span>
+                                    <span class="text-xs sm:text-sm font-bold text-white">${item.move}</span>
+                                </div>
+                                <p class="text-xs text-slate-400 pl-1">${item.reason}</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // =========================================================================
+        // 8. TOAST NOTIFICATIONS & INITIALIZATION
+        // =========================================================================
+        function showToast(message, color = 'emerald') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const colorMap = {
+                emerald: 'border-emerald-500/50 bg-slate-900/95 text-emerald-300',
+                blue: 'border-blue-500/50 bg-slate-900/95 text-blue-300',
+                amber: 'border-amber-500/50 bg-slate-900/95 text-amber-300',
+                rose: 'border-rose-500/50 bg-slate-900/95 text-rose-300'
+            };
+
+            toast.className = `p-3.5 rounded-2xl border shadow-xl backdrop-blur-md text-xs font-bold flex items-center gap-2.5 transition-all duration-300 pointer-events-auto ${colorMap[color] || colorMap.emerald}`;
+            toast.innerHTML = `
+                <i class="fa-solid fa-circle-check text-sm shrink-0"></i>
+                <span>${message}</span>
+            `;
+
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(-8px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            updateOperatingStatusBanner();
+            restoreLocalCheckInSession();
+            syncWithRealCurrentTime(false);
+            renderEquipmentManuals();
+            renderRoutineOptimizer();
+            updateLiveStatsUI();
+
+            await initFirebase();
+            handleQrScanArrival();
+
+            // 1초마다 입실 경과 타이머 갱신
+            setInterval(updateElapsedTimer, 1000);
+
+            // 1분마다 현재 시각 및 실시간 운영 상태 자동 동기화
+            setInterval(() => {
+                updateOperatingStatusBanner();
+                if (state.isLiveTimeMode) {
+                    syncWithRealCurrentTime(false);
+                }
+            }, 60000);
+        });
+    </script>
+</body>
+</html>
